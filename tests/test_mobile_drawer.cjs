@@ -1,0 +1,10 @@
+const fs=require('node:fs');const assert=require('node:assert/strict');
+const css=fs.readFileSync('web/app.css','utf8'),js=fs.readFileSync('web/app.js','utf8'),html=fs.readFileSync('web/index.html','utf8');
+assert(css.includes('.shell{isolation:auto}'),'Mobile stacking fix');
+assert(css.includes('z-index:1001'),'Menu overlays backdrop');
+assert(css.includes('z-index:1000'),'Backdrop behind drawer');
+assert(css.includes('height:100dvh'),'Dynamic Android viewport');
+assert(js.includes('function setMobileNav(visible)'),'Unified drawer state');
+assert(js.includes('setMobileNav(false);render();'),'Navigation closes menu');
+assert(html.includes('id="closeSidebar"'),'Visible close button');
+console.log('PASS mobile drawer stacking + close regressions');

@@ -16,16 +16,16 @@ assert 'MAX_BACKUP_CHARS' in source
 assert 'backupResult(written)' in source
 assert 'onBackPressed()' in source
 assert "window.neonNativeBackupComplete" in (web/'app.js').read_text()
-assert "window.NEON_INFO.version === '1.7.4'" in source
-assert "version:'1.7.4'" in (web/'app.js').read_text()
+assert "window.NEON_INFO.version === '1.7.5'" in source
+assert "version:'1.7.5'" in (web/'app.js').read_text()
 assert 'android:launchMode="singleTask"' in manifest
 assert 'soleNativeActivity' in (web/'app.js').read_text()
 assert 'Content-Security-Policy' in (web/'index.html').read_text()
 assert "connect-src 'self'" in (web/'index.html').read_text()
 assert "frame-src 'none'" in (web/'index.html').read_text()
-assert "versionCode 174" in (root/'app/build.gradle').read_text()
+assert "versionCode 175" in (root/'app/build.gradle').read_text()
 print('PASS Android asset integrity, origin isolation, backup callback, error screen, version, no INTERNET permission')
 print('JS SHA256:',hashlib.sha256((web/'app.js').read_bytes()).hexdigest())
 
-assert "WEB_READY_v1.7.4_games44" in source
-assert "WEB_READY_v1.7.4_games44" in (root/"tests/android_smoke.sh").read_text()
+assert "WEB_READY_v1.7.5_games44" in source
+assert "WEB_READY_v1.7.5_games44" in (root/"tests/android_smoke.sh").read_text()

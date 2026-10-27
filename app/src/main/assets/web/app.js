@@ -176,7 +176,7 @@ function settle(game,stake,payout,detail=''){if(!canModify()){leaseBlock();retur
 function toast(message,negative=false){const host=document.getElementById('toastHost');while(host.children?.length>=3)host.firstElementChild.remove();const t=document.createElement('div');t.className='toast'+(negative?' negative':'');t.textContent=message;document.getElementById('toastHost').appendChild(t);setTimeout(()=>t.remove(),3300)}
 function updateBalance(){const e=document.getElementById('balanceText');if(e)e.textContent=fmt(state.balance)}
 function info(g){return GAMES.find(x=>x.id===g)||GAMES[0]}
-function navigate(g){if(!GAMES.some(x=>x.id===g))return;state.game=g;state.modal=null;document.querySelector('.sidebar')?.classList.remove('open');document.querySelector('.mobile-nav-backdrop')?.classList.remove('show');render();if(typeof window.scrollTo==='function')window.scrollTo(0,0)}
+function navigate(g){if(!GAMES.some(x=>x.id===g))return;state.game=g;state.modal=null;setMobileNav(false);render();if(typeof window.scrollTo==='function')window.scrollTo(0,0)}
 let lastRenderedNavigation=null;
 function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation!==state.game){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span>${x.name}${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button>`).join('');lastRenderedNavigation=state.game}document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
 function gameHTML(){switch(state.game){case'roulette':return rouletteHTML();case'blackjack':return blackjackHTML();case'wheel':return luckyHTML();case'crash':return crashHTML();case'slots':return slotsHTML();case'mines':return minesHTML();case'plinko':return plinkoHTML();case'dice':return diceHTML();case'baccarat':return baccaratHTML();case'coin':return coinHTML();case'keno':return kenoHTML();case'poker':return pokerHTML();case'sicbo':return sicboHTML();case'limbo':return limboHTML();case'hilo':return hiloHTML();case'craps':return crapsHTML();case'roulette-us':return variantRouletteHTML('us');case'roulette-fr':return variantRouletteHTML('fr');case'threecard':return threecardHTML();case'war':return warHTML();case'dragontiger':return dragonHTML();case'tower':return towerHTML();case'bingo':return bingoHTML();case'lotto':return lottoHTML();case'scratch':return scratchHTML();case'seven':return sevenHTML();case'dicepoker':return dicePokerHTML();case'treasure':return treasureHTML();default:return''}}
@@ -432,9 +432,20 @@ function handleAction(button){const a=button.dataset.action,v=button.dataset.val
 document.body.addEventListener('click',e=>{const button=e.target.closest('[data-action]');if(button&&!button.disabled&&(button.dataset.action!=='modal-overlay'||e.target===button))handleAction(button)});
 document.body.addEventListener('change',e=>{if(e.target.id==='backupFile'&&e.target.files?.[0]){const file=e.target.files[0];file.text().then(text=>{try{loadBackup(text)}catch(error){toast('Не удалось восстановить: '+error.message,true)}}).catch(()=>toast('Не удалось прочитать файл',true));return}if(e.target.id==='stakeInput')setStake(e.target.value);if(e.target.id==='minesRange'&&!rt.mines?.active){state.minesCount=Math.max(1,Math.min(Math.min(35,state.minesSize-1),Number(e.target.value)));render()}if(e.target.id==='diceRange'){state.diceChance=Number(e.target.value);render()}});
 document.body.addEventListener('input',e=>{if(e.target.id==='diceRange'){const p=e.target.value;document.getElementById('diceChanceValue')&&(document.getElementById('diceChanceValue').textContent=p+'%');document.getElementById('diceMultiplierValue')&&(document.getElementById('diceMultiplierValue').textContent='×'+(97/Number(p)).toFixed(2))}if(e.target.id==='minesRange'){document.getElementById('minesCountValue')&&(document.getElementById('minesCountValue').textContent=e.target.value)}});
-document.getElementById('menuButton').addEventListener('click',()=>{document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.mobile-nav-backdrop').classList.toggle('show')});
-const backdrop=document.createElement('div');backdrop.className='mobile-nav-backdrop';backdrop.addEventListener('click',()=>{document.querySelector('.sidebar').classList.remove('open');backdrop.classList.remove('show')});document.body.appendChild(backdrop);
-window.addEventListener('keydown',e=>{if(e.key==='Escape'){state.modal=null;renderModal()}});
+const backdrop=document.createElement('div');backdrop.className='mobile-nav-backdrop';backdrop.setAttribute('aria-hidden','true');document.body.appendChild(backdrop);
+function setMobileNav(visible){
+ const aside=document.querySelector('.sidebar'),button=document.getElementById('menuButton');
+ if(!aside||!button)return;const mobile=window.matchMedia('(max-width:960px)').matches,open=Boolean(visible&&mobile);
+ aside.classList.toggle('open',open);backdrop.classList.toggle('show',open);
+ document.body.classList.toggle('nav-visible',open);
+ button.setAttribute('aria-expanded',String(open));aside.setAttribute('aria-hidden',String(mobile&&!open));
+}
+document.getElementById('menuButton').addEventListener('click',()=>setMobileNav(!document.querySelector('.sidebar').classList.contains('open')));
+document.getElementById('closeSidebar').addEventListener('click',()=>setMobileNav(false));
+backdrop.addEventListener('click',()=>setMobileNav(false));
+window.addEventListener('resize',()=>{if(window.innerWidth>960)setMobileNav(false)});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('.sidebar').classList.contains('open'))setMobileNav(false);else{state.modal=null;renderModal()}}});
+setMobileNav(false);
 // NEON CASINO v1.5 — independent offline demo games, no real-money features.
 // Payouts include returned stake, not just net profit. A simulation, not certified gambling software.
 const MORE_GAMES=[
@@ -575,7 +586,7 @@ if(typeof document.getElementById('gameSearch')?.addEventListener==='function')d
 
 render();
 // Debug/test facade deliberately read-only: no hooks to change payouts or randomness.
-window.NEON_INFO=Object.freeze({version:'1.7.4',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.5',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 // The portable desktop launcher runs a loopback-only server and exits after 5 minutes idle.
 if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&location.port==='17866'){
  const neonKeepalive=()=>fetch('/__ping',{method:'GET',cache:'no-store'}).catch(()=>{});
@@ -656,7 +667,7 @@ function applyQualityMode(){document.documentElement?.classList?.toggle('quality
 applyQualityMode();
 // Data exposed for QA cannot mutate balances or force a result.
 lastRenderedNavigation=null;render();
-window.NEON_INFO=Object.freeze({version:'1.7.4',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.5',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 
 
 // Cross-window ownership check on every modifying UI action.

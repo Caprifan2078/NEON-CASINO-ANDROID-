@@ -415,3 +415,28 @@ body::before{
 html{-webkit-tap-highlight-color:transparent}
 @media(max-width:480px){.btn,.icon-btn,.mode-choice,.menu-btn{min-height:44px} .nav-item{min-height:46px}}
 .quality-lite .roulette-wheel,.quality-lite .lucky-wheel-svg,.quality-lite .slot-tile{filter:none!important}
+
+/* v1.7.5 Android overlay fix: sidebar must paint above dimmer. */
+.drawer-toolbar{display:none}
+@media(max-width:960px){
+.shell{isolation:auto}
+.sidebar{position:fixed;inset:0 auto 0 0;top:0;left:0;bottom:0;
+ width:min(84vw,320px);max-width:calc(100vw - 50px);flex:0 0 auto;
+ height:100vh;height:100dvh;min-height:0;z-index:1001;
+ overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+ -webkit-overflow-scrolling:touch;visibility:hidden;pointer-events:none;
+ transform:translate3d(-105%,0,0);
+ transition:transform .23s ease,visibility 0s linear .23s;
+ border-image:none;border-right:1px solid #436174;
+ background:#0c1526;box-shadow:none}
+.sidebar.open{transform:translate3d(0,0,0);visibility:visible;pointer-events:auto;
+ transition:transform .23s ease,visibility 0s;box-shadow:12px 0 42px #000c}
+.mobile-nav-backdrop.show{display:block;position:fixed;inset:0!important;left:0!important;
+ z-index:1000;background:rgba(1,5,13,.78);backdrop-filter:blur(2px)}
+body.nav-visible{overflow:hidden;touch-action:pan-y}
+.drawer-toolbar{display:flex;align-items:center;justify-content:space-between;
+ color:#f0d3a0;font-weight:900;letter-spacing:.08em;padding:1px 5px 12px}
+.sidebar-close{min-width:44px;min-height:44px;border:1px solid #557080;
+ border-radius:11px;color:#fff;background:#213348;font-size:22px}
+.nav-item{min-height:48px}}
+@media(prefers-reduced-motion:reduce){.sidebar,.sidebar.open{transition:none!important}}
