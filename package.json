@@ -1,0 +1,9 @@
+{
+  "name": "neon-casino-android-qa",
+  "version": "1.7.4",
+  "private": true,
+  "description": "Android WebView wrapper for offline 44-game NEON CASINO ROYALE",
+  "scripts": {
+    "test": "node tests/test_logic.cjs && node tests/test_regression.cjs && node tests/test_modes.cjs && node tests/test_v13.cjs && node tests/test_v14.cjs && node tests/test_v15.cjs && node tests/test_v17.cjs && node tests/test_v171.cjs && node tests/test_v172.cjs && node tests/test_v174.cjs"
+  }
+}

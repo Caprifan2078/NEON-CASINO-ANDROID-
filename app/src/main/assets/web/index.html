@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <!-- Only bundled assets may run. No external scripts, frames, connections or payments. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070b16">
+  <meta name="description" content="NEON — офлайн-симулятор казино без настоящих денег. Рулетка, блэкджек, краш и другие игры.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>NEON CASINO ROYALE — v1.7.4</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-icon">✦</div><div><strong>NEON<span>CASINO</span></strong><small>ROYALE • ОФЛАЙН</small></div></div>
+    <div class="nav-caption">ИГРОВОЙ ЗАЛ</div>
+        <div class="sidebar-search-wrap"><input class="sidebar-search" id="gameSearch" type="search" aria-label="Поиск игровых режимов" autocomplete="off" placeholder="Найти игру из 44…"></div>
+    <div class="sidebar-empty" id="sidebarEmpty">Ничего не найдено</div>
+    <nav id="gameNav" class="game-nav"></nav>
+    <div class="sidebar-bottom"><div class="offline"><i></i> Локальная игра</div><p>Только виртуальные фишки. Никаких платежей и вывода средств.</p></div>
+  </aside>
+  <div class="main-wrap">
+    <header class="topbar">
+      <div class="top-left"><button id="menuButton" class="icon-btn menu-btn" title="Игры">☰</button><div class="top-name">ИГРОВОЙ ЗАЛ <span class="top-sub">/ <b id="headerGame">РУЛЕТКА</b></span></div></div>
+      <div class="top-actions"><div class="fake-indicator">● <span>DEMO</span></div><button id="qualityToggle" data-action="quality-toggle" aria-pressed="false" title="Переключить анимации">✧ ПЛАВНО</button><button class="wallet" data-action="wallet" aria-label="Виртуальный кошелёк"><span class="wallet-chip">◈</span><span><small>МОЙ БАЛАНС</small><b id="balanceText">50 000</b></span><span class="add-money">＋</span></button></div>
+    </header>
+    <div class="page-inner"><div id="modeBar" aria-label="Выбор режима игры"></div>
+      <div class="welcome"><div><span class="eyebrow">NEON ROYALE / VISUAL EDITION 1.7.4</span><h1 id="pageTitle">Европейская рулетка</h1><p id="pageSubtitle">Стол, числа, ставки и полная история вращений</p></div><div class="welcome-right"><span>◉</span> БЕЗ РЕАЛЬНЫХ ДЕНЕГ</div></div>
+            <section class="featured-section" aria-label="Быстрый запуск игр">
+        <div class="featured-caption"><strong>✦ &nbsp;ИЗБРАННЫЕ ИГРЫ</strong><small>44 режима · пролистай и выбирай</small></div>
+        <div class="featured-grid" id="featuredGames">
+          <button class="feature-game" data-action="nav" data-game="roulette"><span class="feature-ico">◉</span><span class="feature-title">РУЛЕТКА</span><span class="feature-arrow">↗</span></button>
+          <button class="feature-game" data-action="nav" data-game="blackjack"><span class="feature-ico">♠</span><span class="feature-title">БЛЭКДЖЕК</span><span class="feature-arrow">↗</span></button>
+          <button class="feature-game" data-action="nav" data-game="wheel"><span class="feature-ico">✺</span><span class="feature-title">КОЛЕСО УДАЧИ</span><span class="feature-arrow">↗</span></button>
+          <button class="feature-game" data-action="nav" data-game="crash"><span class="feature-ico">↗</span><span class="feature-title">CRASH</span><span class="feature-arrow">↗</span></button>
+          <button class="feature-game" data-action="nav" data-game="slots5"><span class="feature-ico">▦</span><span class="feature-title">СЛОТЫ 5×3</span><span class="feature-arrow">↗</span></button>
+          <button class="feature-game" data-action="nav" data-game="mines"><span class="feature-ico">◆</span><span class="feature-title">MINES</span><span class="feature-arrow">↗</span></button>
+        </div>
+      </section>
+      <div class="play-layout"><section id="gameArea" class="game-area"></section><section class="side-panel" id="rightPanel"></section></div>
+      <div class="footer-note"><b>NEON CASINO</b><span>Игровая симуляция · Полностью офлайн · Без регистрации и покупок</span></div>
+    </div>
+  </div>
+</div>
+<div id="modalHost"></div>
+<div id="toastHost" role="status" aria-live="polite"></div>
+<script src="app.js" defer></script></body></html>

@@ -1,0 +1,24 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.neon.play.simulator'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.neon.play.simulator'
+        minSdk 24
+        targetSdk 34
+        versionCode 174
+        versionName '1.7.4'
+    }
+    buildTypes {
+        release { minifyEnabled false }
+        debug {
+            minifyEnabled false
+            applicationIdSuffix '.qa'
+            versionNameSuffix '-qa'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -1,0 +1,74 @@
+name: NEON ROYALE — Build and install-test Android APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - 'web/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'tools/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - '.github/workflows/build-android.yml'
+permissions:
+  contents: read
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify offline assets and game rules
+        run: |
+          python3 tools/check_mobile.py
+          node --check web/app.js
+          npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install official SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile APK (official Android Gradle Plugin)
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify package and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -t "$apk" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" | tee /tmp/neon_apksigner.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' /tmp/neon_apksigner.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep '^package:'
+          unzip -l "$apk" | grep 'assets/web/app.js'
+          sha256sum "$apk"
+      - name: Enable hardware acceleration for Android emulator
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Install APK and verify actual game startup in emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 600
+          script: bash tests/android_smoke.sh
+      - name: Publish APK only after successful emulator test
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-ROYALE-v1.7.4-ANDROID-TESTED-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
