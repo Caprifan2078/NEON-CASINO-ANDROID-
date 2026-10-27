@@ -176,10 +176,29 @@ function settle(game,stake,payout,detail=''){if(!canModify()){leaseBlock();retur
 function toast(message,negative=false){const host=document.getElementById('toastHost');while(host.children?.length>=3)host.firstElementChild.remove();const t=document.createElement('div');t.className='toast'+(negative?' negative':'');t.textContent=message;document.getElementById('toastHost').appendChild(t);setTimeout(()=>t.remove(),3300)}
 function updateBalance(){const e=document.getElementById('balanceText');if(e)e.textContent=fmt(state.balance)}
 function info(g){return GAMES.find(x=>x.id===g)||GAMES[0]}
-function navigate(g){if(!GAMES.some(x=>x.id===g))return;state.game=g;state.modal=null;setMobileNav(false);render();if(typeof window.scrollTo==='function')window.scrollTo(0,0)}
-// Favorites only affect navigation; chips, payouts and the two wallets remain separate.
+function navigate(g){if(!GAMES.some(x=>x.id===g))return;state.game=g;state.modal=null;setMobileNav(false);rememberRecent(g);render();if(typeof window.scrollTo==='function')window.scrollTo(0,0)}
+// Favorites are UI preferences, independent of saved chips and both wallets.
 const FAVORITES_STORAGE='neon-casino-favorites-v1';
 let favoriteGames=new Set(),favoritesOnly=false;
+// UI-only recent games: never touches the wallet or the activity log.
+const RECENT_STORAGE='neon-casino-recent-v1';
+let recentGames=[];
+function restoreRecent(){
+ try{const raw=JSON.parse(localStorage.getItem(RECENT_STORAGE)||'[]');
+  if(Array.isArray(raw))recentGames=[...new Set(raw.filter(id=>typeof id==='string'&&GAMES.some(g=>g.id===id)))].slice(0,4);
+ }catch(e){recentGames=[]}
+}
+function renderRecent(){
+ const host=document.getElementById('recentGames');if(!host)return;
+ host.innerHTML=recentGames.map(id=>{const g=GAMES.find(x=>x.id===id);return g?`<button class="recent-game" data-action="nav" data-game="${g.id}" title="${esc(g.name)}">${g.icon} ${esc(g.name)}</button>`:''}).join('');
+ host.hidden=!recentGames.length;
+}
+function rememberRecent(id){
+ if(!GAMES.some(g=>g.id===id))return;
+ recentGames=[id,...recentGames.filter(v=>v!==id)].slice(0,4);
+ try{localStorage.setItem(RECENT_STORAGE,JSON.stringify(recentGames))}catch(e){}
+ renderRecent();
+}
 function restoreFavorites(){
  try{const data=JSON.parse(localStorage.getItem(FAVORITES_STORAGE)||'[]');
   if(Array.isArray(data))favoriteGames=new Set(data.filter(id=>typeof id==='string'&&GAMES.some(g=>g.id===id)).slice(0,GAMES.length));
@@ -187,9 +206,20 @@ function restoreFavorites(){
 }
 function toggleFavorite(id){
  if(!GAMES.some(g=>g.id===id))return;
- if(favoriteGames.has(id))favoriteGames.delete(id);else favoriteGames.add(id);
- try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]))}catch(e){toast('Не удалось сохранить избранное на этом устройстве',true)}
- lastRenderedNavigation=null;render();
+ const wasFavorite=favoriteGames.has(id);
+ if(wasFavorite)favoriteGames.delete(id);else favoriteGames.add(id);
+ try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]))}
+ catch(e){
+  if(wasFavorite)favoriteGames.add(id);else favoriteGames.delete(id);
+  toast('Не удалось сохранить избранное — изменение отменено',true);
+  return;
+ }
+ // Don't reconstruct the running game panel just to redraw a star.
+ if(typeof document.querySelector==='function'){
+  const button=document.querySelector(`[data-action="favorite-toggle"][data-game="${id}"]`);
+  if(button){button.classList.toggle('is-favorite',!wasFavorite);button.setAttribute('aria-pressed',String(!wasFavorite));button.setAttribute('aria-label',`${!wasFavorite?'Убрать из избранного: ':'Добавить в избранное: '}${GAMES.find(g=>g.id===id).name}`);button.textContent=!wasFavorite?'★':'☆'}
+ }
+ syncGameSearch();
 }
 let lastRenderedNavigation=null;
 function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation!==state.game){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<div class="nav-entry"><button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span><span class="nav-game-name">${esc(x.name)}</span>${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button><button class="favorite-toggle ${favoriteGames.has(x.id)?'is-favorite':''}" type="button" data-action="favorite-toggle" data-game="${x.id}" aria-pressed="${favoriteGames.has(x.id)}" aria-label="${favoriteGames.has(x.id)?'Убрать из избранного: ':'Добавить в избранное: '}${esc(x.name)}">${favoriteGames.has(x.id)?'★':'☆'}</button></div>`).join('');lastRenderedNavigation=state.game}document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
@@ -446,19 +476,36 @@ function handleAction(button){const a=button.dataset.action,v=button.dataset.val
 document.body.addEventListener('click',e=>{const button=e.target.closest('[data-action]');if(button&&!button.disabled&&(button.dataset.action!=='modal-overlay'||e.target===button))handleAction(button)});
 document.body.addEventListener('change',e=>{if(e.target.id==='backupFile'&&e.target.files?.[0]){const file=e.target.files[0];file.text().then(text=>{try{loadBackup(text)}catch(error){toast('Не удалось восстановить: '+error.message,true)}}).catch(()=>toast('Не удалось прочитать файл',true));return}if(e.target.id==='stakeInput')setStake(e.target.value);if(e.target.id==='minesRange'&&!rt.mines?.active){state.minesCount=Math.max(1,Math.min(Math.min(35,state.minesSize-1),Number(e.target.value)));render()}if(e.target.id==='diceRange'){state.diceChance=Number(e.target.value);render()}});
 document.body.addEventListener('input',e=>{if(e.target.id==='diceRange'){const p=e.target.value;document.getElementById('diceChanceValue')&&(document.getElementById('diceChanceValue').textContent=p+'%');document.getElementById('diceMultiplierValue')&&(document.getElementById('diceMultiplierValue').textContent='×'+(97/Number(p)).toFixed(2))}if(e.target.id==='minesRange'){document.getElementById('minesCountValue')&&(document.getElementById('minesCountValue').textContent=e.target.value)}});
-const backdrop=document.createElement('div');backdrop.className='mobile-nav-backdrop';backdrop.setAttribute('aria-hidden','true');document.body.appendChild(backdrop);
+const backdrop=document.createElement('div');
+backdrop.className='mobile-nav-backdrop';
+backdrop.setAttribute('aria-hidden','true');
+document.body.appendChild(backdrop);
 function setMobileNav(visible){
- const aside=document.querySelector('.sidebar'),button=document.getElementById('menuButton');
- if(!aside||!button)return;const mobile=window.matchMedia('(max-width:960px)').matches,open=Boolean(visible&&mobile);
- aside.classList.toggle('open',open);backdrop.classList.toggle('show',open);
+ const aside=document.querySelector('.sidebar');
+ const button=document.getElementById('menuButton');
+ if(!aside||!button)return;
+ const mobile=window.matchMedia('(max-width:960px)').matches;
+ const open=Boolean(visible&&mobile);
+ aside.classList.toggle('open',open);
+ backdrop.classList.toggle('show',open);
  document.body.classList.toggle('nav-visible',open);
- button.setAttribute('aria-expanded',String(open));aside.setAttribute('aria-hidden',String(mobile&&!open));
+ button.setAttribute('aria-expanded',String(open));
+ aside.setAttribute('aria-hidden',String(mobile&&!open));
 }
 document.getElementById('menuButton').addEventListener('click',()=>setMobileNav(!document.querySelector('.sidebar').classList.contains('open')));
 document.getElementById('closeSidebar').addEventListener('click',()=>setMobileNav(false));
 backdrop.addEventListener('click',()=>setMobileNav(false));
 window.addEventListener('resize',()=>{if(window.innerWidth>960)setMobileNav(false)});
-window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('.sidebar').classList.contains('open'))setMobileNav(false);else{state.modal=null;renderModal()}}});
+window.addEventListener('keydown',e=>{
+ if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)&&!document.activeElement?.isContentEditable){
+  e.preventDefault();if(window.matchMedia('(max-width:960px)').matches)setMobileNav(true);
+  document.getElementById('gameSearch')?.focus();return;
+ }
+ if(e.key==='Escape'){
+  if(document.querySelector('.sidebar').classList.contains('open'))setMobileNav(false);
+  else{state.modal=null;renderModal()}
+ }
+});
 setMobileNav(false);
 // NEON CASINO v1.5 — independent offline demo games, no real-money features.
 // Payouts include returned stake, not just net profit. A simulation, not certified gambling software.
@@ -598,12 +645,13 @@ function syncGameSearch(){
  const count=document.getElementById('favoritesCount');if(count)count.textContent=String(favoriteGames.size);
  const filter=document.getElementById('favoritesFilter');if(filter){filter.setAttribute('aria-pressed',String(favoritesOnly));filter.classList.toggle('active',favoritesOnly)}
  const empty=document.getElementById('sidebarEmpty');if(empty){empty.style.display=shown?'none':'block';empty.textContent=favoritesOnly&&favoriteGames.size===0?'Добавь игру в избранное, нажав ☆':'Игры не найдены'}
+ const recent=document.getElementById('recentGames');if(recent)recent.hidden=Boolean(q||favoritesOnly||recentGames.length===0);
 }
 if(typeof document.getElementById('gameSearch')?.addEventListener==='function')document.getElementById('gameSearch').addEventListener('input',syncGameSearch);
 
 render();
 // Debug/test facade deliberately read-only: no hooks to change payouts or randomness.
-window.NEON_INFO=Object.freeze({version:'1.7.6',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.7',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 // The portable desktop launcher runs a loopback-only server and exits after 5 minutes idle.
 if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&location.port==='17866'){
  const neonKeepalive=()=>fetch('/__ping',{method:'GET',cache:'no-store'}).catch(()=>{});
@@ -685,8 +733,8 @@ try{
 function applyQualityMode(){document.documentElement?.classList?.toggle('quality-lite',qualityMode==='lite');const b=document.getElementById('qualityToggle');if(b){b.textContent=qualityMode==='lite'?'⚡ ЭКО':'✧ ПЛАВНО';b.setAttribute('aria-pressed',String(qualityMode==='lite'));b.title='Переключить анимации: плавно / экономно'}}
 applyQualityMode();
 // Data exposed for QA cannot mutate balances or force a result.
-restoreFavorites();lastRenderedNavigation=null;render();
-window.NEON_INFO=Object.freeze({version:'1.7.6',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+restoreFavorites();restoreRecent();lastRenderedNavigation=null;render();renderRecent();
+window.NEON_INFO=Object.freeze({version:'1.7.7',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 
 
 // Cross-window ownership check on every modifying UI action.

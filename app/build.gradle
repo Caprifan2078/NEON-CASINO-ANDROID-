@@ -6,14 +6,14 @@ android {
         applicationId 'com.neon.play.simulator'
         minSdk 24
         targetSdk 34
-        versionCode 176
-        versionName '1.7.6'
+        versionCode 177
+        versionName '1.7.7'
     }
     buildTypes {
         release { minifyEnabled false }
         debug {
             minifyEnabled false
-            applicationIdSuffix '.qa176'
+            applicationIdSuffix '.qa177'
             versionNameSuffix '-qa'
         }
     }

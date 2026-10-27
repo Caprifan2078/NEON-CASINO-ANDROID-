@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <title>NEON CASINO ROYALE — v1.7.6</title>
+  <title>NEON CASINO ROYALE — v1.7.7</title>
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -20,6 +20,7 @@
     <div class="brand"><div class="brand-icon">✦</div><div><strong>NEON<span>CASINO</span></strong><small>ROYALE • ОФЛАЙН</small></div></div>
     <div class="nav-caption">ИГРОВОЙ ЗАЛ</div>
         <div class="sidebar-search-wrap"><input class="sidebar-search" id="gameSearch" type="search" aria-label="Поиск игровых режимов" autocomplete="off" placeholder="Найти игру из 44…"></div>
+    <div id="recentGames" class="recent-games" aria-label="Последние игры" hidden></div>
     <div class="nav-filter-bar"><button type="button" class="favorite-filter" id="favoritesFilter" data-action="favorites-filter" aria-pressed="false">☆ Избранное <span id="favoritesCount">0</span></button><span class="nav-filter-tip">☆ = избранное</span></div>
     <div class="sidebar-empty" id="sidebarEmpty">Игры не найдены</div>
     <nav id="gameNav" class="game-nav"></nav>
@@ -31,7 +32,7 @@
       <div class="top-actions"><div class="fake-indicator">● <span>DEMO</span></div><button id="qualityToggle" data-action="quality-toggle" aria-pressed="false" title="Переключить анимации">✧ ПЛАВНО</button><button class="wallet" data-action="wallet" aria-label="Виртуальный кошелёк"><span class="wallet-chip">◈</span><span><small>МОЙ БАЛАНС</small><b id="balanceText">50 000</b></span><span class="add-money">＋</span></button></div>
     </header>
     <div class="page-inner"><div id="modeBar" aria-label="Выбор режима игры"></div>
-      <div class="welcome"><div><span class="eyebrow">NEON ROYALE / VISUAL EDITION 1.7.6</span><h1 id="pageTitle">Европейская рулетка</h1><p id="pageSubtitle">Стол, числа, ставки и полная история вращений</p></div><div class="welcome-right"><span>◉</span> БЕЗ РЕАЛЬНЫХ ДЕНЕГ</div></div>
+      <div class="welcome"><div><span class="eyebrow">NEON ROYALE / VISUAL EDITION 1.7.7</span><h1 id="pageTitle">Европейская рулетка</h1><p id="pageSubtitle">Стол, числа, ставки и полная история вращений</p></div><div class="welcome-right"><span>◉</span> БЕЗ РЕАЛЬНЫХ ДЕНЕГ</div></div>
             <section class="featured-section" aria-label="Быстрый запуск игр">
         <div class="featured-caption"><strong>✦ &nbsp;ИЗБРАННЫЕ ИГРЫ</strong><small>44 режима · пролистай и выбирай</small></div>
         <div class="featured-grid" id="featuredGames">

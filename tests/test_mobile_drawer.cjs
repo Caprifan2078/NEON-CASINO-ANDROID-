@@ -5,6 +5,6 @@ assert(css.includes('z-index:1001'),'Menu overlays backdrop');
 assert(css.includes('z-index:1000'),'Backdrop behind drawer');
 assert(css.includes('height:100dvh'),'Dynamic Android viewport');
 assert(js.includes('function setMobileNav(visible)'),'Unified drawer state');
-assert(js.includes('setMobileNav(false);render();'),'Navigation closes menu');
+assert(/function navigate\(g\)[^\n]*setMobileNav\(false\);rememberRecent\(g\);render\(\)/.test(js),'Navigation closes drawer and tracks recent games');
 assert(html.includes('id="closeSidebar"'),'Visible close button');
 console.log('PASS mobile drawer stacking + close regressions');

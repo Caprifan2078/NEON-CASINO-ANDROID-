@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'), assert=require('node:assert/strict');
+const js=fs.readFileSync('web/app.js','utf8');
+const java=fs.readFileSync('app/src/main/java/com/neon/play/simulator/MainActivity.java','utf8');
+const html=fs.readFileSync('web/index.html','utf8');
+const css=fs.readFileSync('web/app.css','utf8');
+assert(html.includes('id="recentGames"'),'Recently played section');
+assert(js.includes('function rememberRecent(id)'),'Recent game history');
+assert(js.includes('function restoreRecent()'),'Restore game history');
+assert(js.includes('if(wasFavorite)favoriteGames.add(id);else favoriteGames.delete(id);'),'Favorites rollback on save error');
+assert(js.includes('syncGameSearch();\n}'),'Favorites redraw without interrupting running game');
+assert(java.includes("typeof setMobileNav==='function')setMobileNav(false)"),'Native back button cleans drawer state');
+assert(java.includes("document.body.classList.remove('nav-visible')"),'Fallback removes scroll lock');
+assert(css.includes('@media(prefers-reduced-motion:reduce)'),'Reduced motion');
+assert(js.includes("version:'1.7.7'"));
+assert(html.includes('1.7.7'));
+console.log('PASS v1.7.7 visual prefs rollback, navigation and Android back');

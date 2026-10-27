@@ -460,3 +460,12 @@ body.nav-visible{overflow:hidden;touch-action:pan-y}
 @media(max-width:960px){.favorite-toggle{min-width:44px;min-height:48px}.nav-entry>.nav-item{min-height:48px}}
 @media(hover:none){.nav-entry .nav-item:hover{transform:none}.favorite-toggle:hover{transform:none}}
 @media(prefers-reduced-motion:reduce){.favorite-toggle{transition:none!important}}
+
+/* v1.7.7: compact recent games, keyboard focus and affordable motion. */
+.recent-games{display:flex;gap:6px;flex-wrap:wrap;padding:4px 3px 11px}
+.recent-games[hidden]{display:none!important}
+.recent-game{min-height:37px;max-width:100%;border:1px solid #35516b;border-radius:9px;padding:5px 9px;background:#1a2c43;color:#dbe8f5;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;touch-action:manipulation;transition:background .16s ease,border-color .16s ease}
+.recent-game:hover{background:#28405a;border-color:#60b3b3}
+.recent-game:focus-visible,.favorite-toggle:focus-visible{outline:2px solid #f7d483;outline-offset:2px}
+@media(max-width:960px){.recent-game{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.recent-game{transition:none}}

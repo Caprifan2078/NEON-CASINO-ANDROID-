@@ -162,10 +162,10 @@ public final class MainActivity extends Activity {
     private void verifyGameReady(WebView view, int attemptsLeft) {
         view.postDelayed(() -> {
             if (webView != view || destroyed) return;
-            view.evaluateJavascript("Boolean(window.NEON_INFO && window.NEON_INFO.version === '1.7.6' && window.NEON_INFO.gameCount === 44)", result -> {
+            view.evaluateJavascript("Boolean(window.NEON_INFO && window.NEON_INFO.version === '1.7.7' && window.NEON_INFO.gameCount === 44)", result -> {
                 if (webView != view || destroyed) return;
                 if ("true".equals(result)) {
-                    Log.i("NEON_QA", "WEB_READY_v1.7.6_games44");
+                    Log.i("NEON_QA", "WEB_READY_v1.7.7_games44");
                 } else if (attemptsLeft > 1) {
                     verifyGameReady(view, attemptsLeft - 1);
                 } else {
@@ -302,7 +302,7 @@ public final class MainActivity extends Activity {
         if (webView == null) { super.onBackPressed(); return; }
         webView.evaluateJavascript("(function(){if(typeof state!=='undefined'&&state.modal){state.modal=null;renderModal();return true;}" +
                 "var side=document.querySelector('.sidebar');var shade=document.querySelector('.mobile-nav-backdrop');" +
-                "if(side&&side.classList.contains('open')){side.classList.remove('open');if(shade)shade.classList.remove('show');return true;}" +
+                "if(side&&side.classList.contains('open')){if(typeof setMobileNav==='function')setMobileNav(false);else{side.classList.remove('open');if(shade)shade.classList.remove('show');document.body.classList.remove('nav-visible');}return true;}" +
                 "return false})()", value -> {
             if (!"true".equals(value) && !isFinishing()) {
                 new AlertDialog.Builder(this).setMessage("Закрыть NEON CASINO?")
