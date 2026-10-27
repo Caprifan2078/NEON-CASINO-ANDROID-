@@ -177,8 +177,22 @@ function toast(message,negative=false){const host=document.getElementById('toast
 function updateBalance(){const e=document.getElementById('balanceText');if(e)e.textContent=fmt(state.balance)}
 function info(g){return GAMES.find(x=>x.id===g)||GAMES[0]}
 function navigate(g){if(!GAMES.some(x=>x.id===g))return;state.game=g;state.modal=null;setMobileNav(false);render();if(typeof window.scrollTo==='function')window.scrollTo(0,0)}
+// Favorites only affect navigation; chips, payouts and the two wallets remain separate.
+const FAVORITES_STORAGE='neon-casino-favorites-v1';
+let favoriteGames=new Set(),favoritesOnly=false;
+function restoreFavorites(){
+ try{const data=JSON.parse(localStorage.getItem(FAVORITES_STORAGE)||'[]');
+  if(Array.isArray(data))favoriteGames=new Set(data.filter(id=>typeof id==='string'&&GAMES.some(g=>g.id===id)).slice(0,GAMES.length));
+ }catch(e){favoriteGames=new Set()}
+}
+function toggleFavorite(id){
+ if(!GAMES.some(g=>g.id===id))return;
+ if(favoriteGames.has(id))favoriteGames.delete(id);else favoriteGames.add(id);
+ try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]))}catch(e){toast('Не удалось сохранить избранное на этом устройстве',true)}
+ lastRenderedNavigation=null;render();
+}
 let lastRenderedNavigation=null;
-function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation!==state.game){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span>${x.name}${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button>`).join('');lastRenderedNavigation=state.game}document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
+function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation!==state.game){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<div class="nav-entry"><button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span><span class="nav-game-name">${esc(x.name)}</span>${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button><button class="favorite-toggle ${favoriteGames.has(x.id)?'is-favorite':''}" type="button" data-action="favorite-toggle" data-game="${x.id}" aria-pressed="${favoriteGames.has(x.id)}" aria-label="${favoriteGames.has(x.id)?'Убрать из избранного: ':'Добавить в избранное: '}${esc(x.name)}">${favoriteGames.has(x.id)?'★':'☆'}</button></div>`).join('');lastRenderedNavigation=state.game}document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
 function gameHTML(){switch(state.game){case'roulette':return rouletteHTML();case'blackjack':return blackjackHTML();case'wheel':return luckyHTML();case'crash':return crashHTML();case'slots':return slotsHTML();case'mines':return minesHTML();case'plinko':return plinkoHTML();case'dice':return diceHTML();case'baccarat':return baccaratHTML();case'coin':return coinHTML();case'keno':return kenoHTML();case'poker':return pokerHTML();case'sicbo':return sicboHTML();case'limbo':return limboHTML();case'hilo':return hiloHTML();case'craps':return crapsHTML();case'roulette-us':return variantRouletteHTML('us');case'roulette-fr':return variantRouletteHTML('fr');case'threecard':return threecardHTML();case'war':return warHTML();case'dragontiger':return dragonHTML();case'tower':return towerHTML();case'bingo':return bingoHTML();case'lotto':return lottoHTML();case'scratch':return scratchHTML();case'seven':return sevenHTML();case'dicepoker':return dicePokerHTML();case'treasure':return treasureHTML();default:return''}}
 function amountHTML(){return `<span class="panel-label">РАЗМЕР СТАВКИ (◈)</span><div class="amount-line"><button class="amount-step" data-action="amount-step" data-delta="-1">−</button><input id="stakeInput" class="amount-input" type="number" step="10" min="10" max="1000000" value="${state.stake}" aria-label="Ставка"><button class="amount-step" data-action="amount-step" data-delta="1">+</button></div><div class="quick-amounts">${[10,100,500,1000,5000].map(n=>`<button class="chip-quick ${state.stake===n?'active':''}" data-action="set-stake" data-value="${n}">${fmt(n)}</button>`).join('')}</div>`}
 function betPanel(buttonLabel='ИГРАТЬ',action='generic-play',disabled=false,extra=''){return `<div class="panel"><div class="panel-header"><h3>Управление ставкой</h3><span class="subcap">ВИРТУАЛЬНЫЕ ФИШКИ</span></div><div class="panel-body">${amountHTML()}${extra}<button class="btn primary block" style="margin-top:16px" data-action="${action}" ${disabled?'disabled':''}>${buttonLabel}</button></div></div>`}
@@ -575,18 +589,21 @@ function syncGameSearch(){
  if(typeof document.querySelectorAll!=='function')return;
  const q=(document.getElementById('gameSearch')?.value||'').toLocaleLowerCase('ru').trim();
  let shown=0;
- document.querySelectorAll('#gameNav .nav-item').forEach(item=>{
-  const matches= !q || item.textContent.toLocaleLowerCase('ru').includes(q);
-  item.hidden=!matches;
+ document.querySelectorAll('#gameNav .nav-entry').forEach(row=>{
+  const button=row.querySelector('.nav-item');
+  const matches=Boolean(button)&&(!q||button.textContent.toLocaleLowerCase('ru').includes(q))&&(!favoritesOnly||favoriteGames.has(button.dataset.game));
+  row.hidden=!matches;
   if(matches)shown++;
  });
- const empty=document.getElementById('sidebarEmpty');if(empty)empty.style.display=shown?'none':'block';
+ const count=document.getElementById('favoritesCount');if(count)count.textContent=String(favoriteGames.size);
+ const filter=document.getElementById('favoritesFilter');if(filter){filter.setAttribute('aria-pressed',String(favoritesOnly));filter.classList.toggle('active',favoritesOnly)}
+ const empty=document.getElementById('sidebarEmpty');if(empty){empty.style.display=shown?'none':'block';empty.textContent=favoritesOnly&&favoriteGames.size===0?'Добавь игру в избранное, нажав ☆':'Игры не найдены'}
 }
 if(typeof document.getElementById('gameSearch')?.addEventListener==='function')document.getElementById('gameSearch').addEventListener('input',syncGameSearch);
 
 render();
 // Debug/test facade deliberately read-only: no hooks to change payouts or randomness.
-window.NEON_INFO=Object.freeze({version:'1.7.5',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.6',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 // The portable desktop launcher runs a loopback-only server and exits after 5 minutes idle.
 if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&location.port==='17866'){
  const neonKeepalive=()=>fetch('/__ping',{method:'GET',cache:'no-store'}).catch(()=>{});
@@ -650,6 +667,8 @@ handleAction=function(button){const a=button.dataset.action,v=button.dataset.val
  case 'teen-start':teenStart();return;case 'teen-play':teenFinish(true);return;case 'teen-fold':teenFinish(false);return;
  case 'fan-pick':if(FAN_BETS.some(x=>x[0]===v)){state.fantanBet=v;render()}return;case 'fan-play':fanPlay();return;
  case 'crown-pick':if(Number.isInteger(Number(v))&&Number(v)>=0&&Number(v)<6){state.crownBet=Number(v);render()}return;case 'crown-play':crownPlay();return;
+ case 'favorite-toggle':toggleFavorite(button.dataset.game);return;
+ case 'favorites-filter':favoritesOnly=!favoritesOnly;syncGameSearch();return;
  case 'quality-toggle':qualityMode=qualityMode==='normal'?'lite':'normal';try{localStorage.setItem(QUALITY_STORAGE,qualityMode)}catch(e){}applyQualityMode();return;
  default:v17HandleBefore(button)
  }
@@ -666,14 +685,14 @@ try{
 function applyQualityMode(){document.documentElement?.classList?.toggle('quality-lite',qualityMode==='lite');const b=document.getElementById('qualityToggle');if(b){b.textContent=qualityMode==='lite'?'⚡ ЭКО':'✧ ПЛАВНО';b.setAttribute('aria-pressed',String(qualityMode==='lite'));b.title='Переключить анимации: плавно / экономно'}}
 applyQualityMode();
 // Data exposed for QA cannot mutate balances or force a result.
-lastRenderedNavigation=null;render();
-window.NEON_INFO=Object.freeze({version:'1.7.5',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+restoreFavorites();lastRenderedNavigation=null;render();
+window.NEON_INFO=Object.freeze({version:'1.7.6',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 
 
 // Cross-window ownership check on every modifying UI action.
 const v171HandleAction=handleAction;
 handleAction=function(button){
- const readonlyActions=new Set(['nav','wallet','close-modal','modal-overlay','history','daily-history','quality-toggle']);
+ const readonlyActions=new Set(['nav','wallet','close-modal','modal-overlay','history','daily-history','quality-toggle','favorite-toggle','favorites-filter']);
  if(!canModify()&&!readonlyActions.has(button.dataset.action)){leaseBlock();return}
  return v171HandleAction(button)
 };

@@ -23,7 +23,7 @@ with Server(('127.0.0.1',0),Quiet) as server:
             html=html.replace('<link rel=\"stylesheet\" href=\"app.css\">','<style>'+ (ROOT/'app.css').read_text() +'</style>')
             html=html.replace('<script src=\"app.js\" defer></script>','<script>'+ (ROOT/'app.js').read_text() +'</script>')
             page.set_content(html,wait_until='load',timeout=30000)
-            page.wait_for_function("window.NEON_INFO && window.NEON_INFO.gameCount===44 && window.NEON_INFO.version==='1.7.5'",timeout=15000)
+            page.wait_for_function("window.NEON_INFO && window.NEON_INFO.gameCount===44 && window.NEON_INFO.version==='1.7.6'",timeout=15000)
             assert page.locator('#gameNav .nav-item').count()==44,(width,page.locator('#gameNav .nav-item').count())
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 2'),width
             assert not errors,(width,errors)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 apk='app/build/outputs/apk/debug/app-debug.apk'
-package='com.neon.play.simulator.qa175'
+package='com.neon.play.simulator.qa176'
 activity="$package/com.neon.play.simulator.MainActivity"
 adb install -r "$apk"
 adb shell am force-stop "$package" || true
@@ -9,7 +9,7 @@ adb logcat -c
 adb shell am start -W -n "$activity"
 ready=0
 for attempt in $(seq 1 30); do
-  if adb logcat -d -s NEON_QA:I '*:S' | grep -q 'WEB_READY_v1.7.5_games44'; then
+  if adb logcat -d -s NEON_QA:I '*:S' | grep -q 'WEB_READY_v1.7.6_games44'; then
     ready=1
     break
   fi

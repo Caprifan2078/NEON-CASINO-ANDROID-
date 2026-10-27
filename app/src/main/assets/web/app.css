@@ -440,3 +440,23 @@ body.nav-visible{overflow:hidden;touch-action:pan-y}
  border-radius:11px;color:#fff;background:#213348;font-size:22px}
 .nav-item{min-height:48px}}
 @media(prefers-reduced-motion:reduce){.sidebar,.sidebar.open{transition:none!important}}
+
+/* v1.7.6 mobile: quick-access favorites; light composited interactions. */
+.game-nav{display:flex;flex-direction:column;gap:5px}
+.nav-entry{display:flex;align-items:stretch;gap:4px;min-width:0}
+.nav-entry[hidden]{display:none!important}
+.nav-entry>.nav-item{display:flex;align-items:center;flex:1 1 auto;min-width:0;text-align:left;padding:8px 7px;gap:8px;border:1px solid transparent}
+.nav-game-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.nav-entry .nav-ico{display:grid;place-items:center}
+.nav-entry .nav-tag{margin-left:auto}
+.favorite-toggle{flex:0 0 42px;min-height:46px;border-radius:10px;background:#1a2940;border:1px solid #344865;color:#93a9bb;font-size:23px;touch-action:manipulation}
+.favorite-toggle.is-favorite{color:#f9d37f;border-color:#977546;background:#403421}
+.favorite-toggle:active{transform:scale(.95)}
+.nav-filter-bar{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 3px 10px}
+.favorite-filter{border-radius:10px;min-height:40px;padding:7px 11px;background:#182538;border:1px solid #38516a;color:#bfcfe1;font-weight:750;white-space:nowrap}
+.favorite-filter.active{background:#41351d;border-color:#dfb55b;color:#ffe3a3}
+.favorite-filter span{opacity:.8;padding-left:4px}
+.nav-filter-tip{font-size:10px;line-height:1.3;color:#90a3b6;text-align:right}
+@media(max-width:960px){.favorite-toggle{min-width:44px;min-height:48px}.nav-entry>.nav-item{min-height:48px}}
+@media(hover:none){.nav-entry .nav-item:hover{transform:none}.favorite-toggle:hover{transform:none}}
+@media(prefers-reduced-motion:reduce){.favorite-toggle{transition:none!important}}

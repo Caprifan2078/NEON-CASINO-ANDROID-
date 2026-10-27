@@ -1,0 +1,15 @@
+'use strict';
+const fs=require('node:fs');const assert=require('node:assert/strict');
+const html=fs.readFileSync('web/index.html','utf8');
+const js=fs.readFileSync('web/app.js','utf8');
+const css=fs.readFileSync('web/app.css','utf8');
+assert(html.includes('id="favoritesFilter"')&&html.includes('id="favoritesCount"'));
+assert(js.includes("const FAVORITES_STORAGE='neon-casino-favorites-v1'"));
+assert(js.includes('function restoreFavorites()')&&js.includes('function toggleFavorite(id)'));
+assert(js.includes("case 'favorite-toggle':toggleFavorite(button.dataset.game);return;"));
+assert(js.includes("case 'favorites-filter':favoritesOnly=!favoritesOnly;syncGameSearch();return;"));
+assert(js.includes("'favorite-toggle','favorites-filter'"));
+assert(js.includes("row.hidden=!matches;"));
+assert(css.includes('.nav-entry[hidden]{display:none!important}'));
+assert(css.includes('.favorite-toggle{')&&css.includes('touch-action:manipulation'));
+console.log('PASS favorites input, storage, readonly ownership, filtering, touch targets');
