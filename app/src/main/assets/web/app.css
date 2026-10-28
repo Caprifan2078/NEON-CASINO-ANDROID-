@@ -469,3 +469,12 @@ body.nav-visible{overflow:hidden;touch-action:pan-y}
 .recent-game:focus-visible,.favorite-toggle:focus-visible{outline:2px solid #f7d483;outline-offset:2px}
 @media(max-width:960px){.recent-game{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.recent-game{transition:none}}
+
+/* v1.7.8 lightweight game navigation and configurable shortcut strip. */
+.featured-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.compact-toggle{background:#1b293a;border:1px solid #3a5369;color:#e5efff;border-radius:9px;padding:5px 11px;min-height:39px;touch-action:manipulation;font-weight:650}
+.compact-toggle:focus-visible{outline:2px solid #f9ce76;outline-offset:2px}
+.featured-section.featured-collapsed .featured-grid{display:none!important}
+.featured-section.featured-collapsed{margin-bottom:12px}
+@media(max-width:520px){.featured-caption{align-items:center}.featured-tools small{display:none}.compact-toggle{min-height:44px}.recent-game,.favorite-toggle{will-change:auto}}
+@media(prefers-reduced-motion:reduce){.compact-toggle{transition:none!important}}

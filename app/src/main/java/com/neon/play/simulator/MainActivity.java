@@ -162,10 +162,10 @@ public final class MainActivity extends Activity {
     private void verifyGameReady(WebView view, int attemptsLeft) {
         view.postDelayed(() -> {
             if (webView != view || destroyed) return;
-            view.evaluateJavascript("Boolean(window.NEON_INFO && window.NEON_INFO.version === '1.7.7' && window.NEON_INFO.gameCount === 44)", result -> {
+            view.evaluateJavascript("Boolean(window.NEON_INFO && window.NEON_INFO.version === '1.7.8' && window.NEON_INFO.gameCount === 44)", result -> {
                 if (webView != view || destroyed) return;
                 if ("true".equals(result)) {
-                    Log.i("NEON_QA", "WEB_READY_v1.7.7_games44");
+                    Log.i("NEON_QA", "WEB_READY_v1.7.8_games44");
                 } else if (attemptsLeft > 1) {
                     verifyGameReady(view, attemptsLeft - 1);
                 } else {

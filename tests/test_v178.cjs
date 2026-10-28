@@ -1,0 +1,10 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const js=fs.readFileSync('web/app.js','utf8');const css=fs.readFileSync('web/app.css','utf8');const html=fs.readFileSync('web/index.html','utf8');
+assert(js.includes('if(lastRenderedNavigation===null){'),'Build nav only once');
+assert(js.includes("document.querySelectorAll('#gameNav .nav-item').forEach"),"Incremental active status");
+assert(!js.includes('if(lastRenderedNavigation!==state.game){'),'Old nav rebuilding removed');
+assert(html.includes('id="compactToggle"')&&js.includes('COMPACT_STORAGE'),'Persistent shortcuts preference');
+assert(css.includes('featured-collapsed .featured-grid'),'Shortcuts collapse style');
+assert(js.includes("Number(location.port)>=17877"),"PC keepalive matches launcher and backup ports");
+assert(js.includes("version:'1.7.8'"),'Correct game version');
+console.log('PASS 1.7.8: nav update, shortcuts, PC heartbeat, version');

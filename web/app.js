@@ -222,7 +222,7 @@ function toggleFavorite(id){
  syncGameSearch();
 }
 let lastRenderedNavigation=null;
-function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation!==state.game){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<div class="nav-entry"><button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span><span class="nav-game-name">${esc(x.name)}</span>${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button><button class="favorite-toggle ${favoriteGames.has(x.id)?'is-favorite':''}" type="button" data-action="favorite-toggle" data-game="${x.id}" aria-pressed="${favoriteGames.has(x.id)}" aria-label="${favoriteGames.has(x.id)?'Убрать из избранного: ':'Добавить в избранное: '}${esc(x.name)}">${favoriteGames.has(x.id)?'★':'☆'}</button></div>`).join('');lastRenderedNavigation=state.game}document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
+function render(){renderModeBar();let g=info(state.game);document.getElementById('headerGame').textContent=g.name.toUpperCase();document.getElementById('pageTitle').textContent=g.title;document.getElementById('pageSubtitle').textContent=g.sub;if(lastRenderedNavigation===null){document.getElementById('gameNav').innerHTML=GAMES.map(x=>`<div class="nav-entry"><button class="nav-item ${x.id===state.game?'active':''}" data-action="nav" data-game="${x.id}"><span class="nav-ico">${x.icon}</span><span class="nav-game-name">${esc(x.name)}</span>${['crash','mines'].includes(x.id)?'<span class="nav-tag">HOT</span>':''}</button><button class="favorite-toggle ${favoriteGames.has(x.id)?'is-favorite':''}" type="button" data-action="favorite-toggle" data-game="${x.id}" aria-pressed="${favoriteGames.has(x.id)}" aria-label="${favoriteGames.has(x.id)?'Убрать из избранного: ':'Добавить в избранное: '}${esc(x.name)}">${favoriteGames.has(x.id)?'★':'☆'}</button></div>`).join('');lastRenderedNavigation='ready'}if(typeof document.querySelectorAll==='function')document.querySelectorAll('#gameNav .nav-item').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));document.getElementById('gameArea').innerHTML=gameHTML();document.getElementById('rightPanel').innerHTML=rightHTML();updateBalance();if(typeof document.querySelectorAll==='function'){document.querySelectorAll('.feature-game').forEach(el=>el.classList.toggle('active',el.dataset.game===state.game));syncGameSearch()}renderModal();if(state.game==='plinko')drawPlinko();if(state.game==='crash'&&rt.crash?.active)updateCrashVisual()}
 function gameHTML(){switch(state.game){case'roulette':return rouletteHTML();case'blackjack':return blackjackHTML();case'wheel':return luckyHTML();case'crash':return crashHTML();case'slots':return slotsHTML();case'mines':return minesHTML();case'plinko':return plinkoHTML();case'dice':return diceHTML();case'baccarat':return baccaratHTML();case'coin':return coinHTML();case'keno':return kenoHTML();case'poker':return pokerHTML();case'sicbo':return sicboHTML();case'limbo':return limboHTML();case'hilo':return hiloHTML();case'craps':return crapsHTML();case'roulette-us':return variantRouletteHTML('us');case'roulette-fr':return variantRouletteHTML('fr');case'threecard':return threecardHTML();case'war':return warHTML();case'dragontiger':return dragonHTML();case'tower':return towerHTML();case'bingo':return bingoHTML();case'lotto':return lottoHTML();case'scratch':return scratchHTML();case'seven':return sevenHTML();case'dicepoker':return dicePokerHTML();case'treasure':return treasureHTML();default:return''}}
 function amountHTML(){return `<span class="panel-label">РАЗМЕР СТАВКИ (◈)</span><div class="amount-line"><button class="amount-step" data-action="amount-step" data-delta="-1">−</button><input id="stakeInput" class="amount-input" type="number" step="10" min="10" max="1000000" value="${state.stake}" aria-label="Ставка"><button class="amount-step" data-action="amount-step" data-delta="1">+</button></div><div class="quick-amounts">${[10,100,500,1000,5000].map(n=>`<button class="chip-quick ${state.stake===n?'active':''}" data-action="set-stake" data-value="${n}">${fmt(n)}</button>`).join('')}</div>`}
 function betPanel(buttonLabel='ИГРАТЬ',action='generic-play',disabled=false,extra=''){return `<div class="panel"><div class="panel-header"><h3>Управление ставкой</h3><span class="subcap">ВИРТУАЛЬНЫЕ ФИШКИ</span></div><div class="panel-body">${amountHTML()}${extra}<button class="btn primary block" style="margin-top:16px" data-action="${action}" ${disabled?'disabled':''}>${buttonLabel}</button></div></div>`}
@@ -428,7 +428,7 @@ function snapshot(){
 if(typeof window!=='undefined') window.neonNativeBackupComplete=function(success){
  toast(success?'Резервная копия сохранена в выбранный файл':'Резервная копия не сохранена',!success);
 };
-function exportBackup(){if(!canModify()){leaseBlock();return}try{const data=JSON.stringify(snapshot(),null,2);if(typeof window!=='undefined'&&window.NeonBridge&&typeof window.NeonBridge.saveBackup==='function'){window.NeonBridge.saveBackup(data);return;}const blob=new Blob([data],{type:'application/json'}),url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download='neon-casino-save.json';document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Копия сохранения создана')}catch(e){toast('Экспорт не поддерживается этим браузером',true)}}
+function exportBackup(){if(!canModify()){leaseBlock();return}try{const data=JSON.stringify(snapshot(),null,2);if(typeof window!=='undefined'&&window.NeonBridge&&typeof window.NeonBridge.saveBackup==='function'){window.NeonBridge.saveBackup(data);return;}const blob=new Blob([data],{type:'application/json'}),url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download='neon-casino-save.json';document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Скачивание копии сохранения запущено')}catch(e){toast('Экспорт не поддерживается этим браузером',true)}}
 function resetRuntime(){roundEpoch++;if(rt.crash?.interval)clearInterval(rt.crash.interval);if(rt.plinko?.timer)clearInterval(rt.plinko.timer);Object.assign(rt,{bets:[],rouletteSpinning:false,rouletteRotation:0,rouletteResult:null,rouletteNotice:'',rouletteTape:null,wheelSpinning:false,wheelRotation:0,wheelResult:null,wheelNotice:'',bj:null,crash:null,slots:null,mines:null,plinko:null,diceRoll:null,diceNotice:'',baccarat:null,coin:null,keno:null,poker:null,sicbo:null,limbo:null,hilo:null,craps:null})}
 function loadBackup(raw){
  if(!canModify())throw Error('Другое окно редактирует сохранение. Обнови страницу после его закрытия.');
@@ -651,9 +651,9 @@ if(typeof document.getElementById('gameSearch')?.addEventListener==='function')d
 
 render();
 // Debug/test facade deliberately read-only: no hooks to change payouts or randomness.
-window.NEON_INFO=Object.freeze({version:'1.7.7',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.8',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 // The portable desktop launcher runs a loopback-only server and exits after 5 minutes idle.
-if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&location.port==='17866'){
+if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&Number(location.port)>=17877&&Number(location.port)<=17888){
  const neonKeepalive=()=>fetch('/__ping',{method:'GET',cache:'no-store'}).catch(()=>{});
  neonKeepalive();setInterval(neonKeepalive,20000);
 }
@@ -722,6 +722,20 @@ handleAction=function(button){const a=button.dataset.action,v=button.dataset.val
  }
 };
 // Persist only the independent visual preference, never alter game mechanics or RNG.
+const COMPACT_STORAGE='neon-casino-compact-v1';
+let compactShortcuts=false;
+try{compactShortcuts=localStorage.getItem(COMPACT_STORAGE)==='1'}catch(e){}
+function applyCompactShortcuts(){
+ const area=document.querySelector('.featured-section'),button=document.getElementById('compactToggle');
+ if(area)area.classList.toggle('featured-collapsed',compactShortcuts);
+ if(button){button.setAttribute('aria-expanded',String(!compactShortcuts));button.textContent=compactShortcuts?'Развернуть':'Свернуть'}
+}
+if(typeof document.getElementById('compactToggle')?.addEventListener==='function')document.getElementById('compactToggle').addEventListener('click',()=>{
+ compactShortcuts=!compactShortcuts;
+ try{localStorage.setItem(COMPACT_STORAGE,compactShortcuts?'1':'0')}catch(e){toast('Настройку вида не удалось сохранить',true)}
+ applyCompactShortcuts();
+});
+applyCompactShortcuts();
 const QUALITY_STORAGE='neon-casino-quality-v1';
 let qualityMode='normal';
 try{
@@ -734,7 +748,7 @@ function applyQualityMode(){document.documentElement?.classList?.toggle('quality
 applyQualityMode();
 // Data exposed for QA cannot mutate balances or force a result.
 restoreFavorites();restoreRecent();lastRenderedNavigation=null;render();renderRecent();
-window.NEON_INFO=Object.freeze({version:'1.7.7',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.7.8',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 
 
 // Cross-window ownership check on every modifying UI action.
