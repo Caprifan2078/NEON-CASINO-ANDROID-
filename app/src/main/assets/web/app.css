@@ -478,3 +478,8 @@ body.nav-visible{overflow:hidden;touch-action:pan-y}
 .featured-section.featured-collapsed{margin-bottom:12px}
 @media(max-width:520px){.featured-caption{align-items:center}.featured-tools small{display:none}.compact-toggle{min-height:44px}.recent-game,.favorite-toggle{will-change:auto}}
 @media(prefers-reduced-motion:reduce){.compact-toggle{transition:none!important}}
+
+/* v1.7.9: reduced costly filters and responsive touch targets on low-end devices. */
+.quality-lite .roulette-wheel,.quality-lite #luckyWheelSvg{filter:none!important}
+.quality-lite .roulette-board-scroll,.quality-lite .sidebar{scroll-behavior:auto!important}
+@media (max-width:960px){.chip-button,.btn,.mode-choice,.favorite-toggle,.compact-toggle{touch-action:manipulation}}

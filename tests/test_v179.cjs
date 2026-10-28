@@ -1,0 +1,33 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto'),assert=require('node:assert/strict');
+const src=fs.readFileSync('web/app.js','utf8');
+function harness(){
+ const saves={};let writes=0,reject=false;const elems=new Map();
+ const node=id=>{if(!elems.has(id))elems.set(id,{value:'',innerHTML:'',textContent:'',style:{},dataset:{},children:[],firstElementChild:null,addEventListener(){},appendChild(){},remove(){},setAttribute(){},classList:{add(){},remove(){},toggle(){},contains(){return false}},getContext(){return new Proxy({}, {get:()=>()=>{}})}});return elems.get(id)};
+ const localStorage={getItem(k){return saves[k]??null},setItem(k,v){if(k==='neon-casino-local-v1'){writes++;if(reject)throw Error('quota')}saves[k]=String(v)},removeItem(k){delete saves[k]}};
+ const ctx={console,Math,Boolean,Number,Date,JSON,Array,Object,Set,Map,String,Intl,Uint32Array,Blob,crypto:crypto.webcrypto,localStorage,performance:{now:()=>0},requestAnimationFrame:f=>f(),setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){},confirm:()=>true,document:{getElementById:node,createElement:()=>node('created'+Math.random()),querySelector:()=>null,querySelectorAll:()=>[],body:{appendChild(){},addEventListener(){}}},window:{addEventListener(){},matchMedia:()=>({matches:false})},URL:{createObjectURL:()=>'',revokeObjectURL(){}}};
+ vm.createContext(ctx);vm.runInContext(src,ctx);
+ return {run:x=>vm.runInContext(x,ctx),writes:()=>writes,fail:()=>reject=true};
+}
+const g=harness();let writes=g.writes();
+g.run('state.stake=100;letItRideStart()');
+assert.equal(g.writes()-writes,1,'Let It Ride must commit three bets in one write');
+assert.equal(g.run('state.reserved'),300);
+g.run('letItRideNext(true);letItRideNext(false)');
+assert.equal(g.run('state.reserved'),0);
+writes=g.writes();g.run('state.teenPairPlus=true;state.stake=120;teenStart()');
+assert.equal(g.writes()-writes,1,'Ante and Pair Plus must be atomic');
+assert.equal(g.run('state.reserved'),240);
+g.run('teenFinish(false)');assert.equal(g.run('state.reserved'),0);
+const bad=harness();bad.fail();
+bad.run('state.stake=200;letItRideStart()');
+assert.equal(bad.run('state.reserved'),0);assert.equal(bad.run('state.balance'),50000);
+bad.run('state.teenPairPlus=true;teenStart()');
+assert.equal(bad.run('state.reserved'),0);assert.equal(bad.run('state.balance'),50000);
+const high=harness();high.run('state.balance=5000000;state.stake=1000000;letItRideStart()');
+assert.equal(high.run('state.reserved'),3000000);
+assert.equal(high.run('spendGrouped(1000001,2)'),false);
+assert.equal(g.run('spinDuration(4200)'),4200);g.run("qualityMode='lite'");
+assert.equal(g.run('spinDuration(4200)'),380);
+assert.equal(g.run('GAMES.length'),44);assert.equal(g.run('window.NEON_INFO.version'),'1.7.9');
+console.log('PASS v1.7.9 atomic grouped bets, failing storage, high stakes, ECO timing, 44 games');
