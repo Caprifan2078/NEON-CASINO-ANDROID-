@@ -661,7 +661,7 @@ if(typeof document.getElementById('gameSearch')?.addEventListener==='function')d
 
 render();
 // Debug/test facade deliberately read-only: no hooks to change payouts or randomness.
-window.NEON_INFO=Object.freeze({version:'1.7.9',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.8.0',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 // The portable desktop launcher runs a loopback-only server and exits after 5 minutes idle.
 if(typeof location!=='undefined'&&location.hostname==='127.0.0.1'&&Number(location.port)>=17877&&Number(location.port)<=17888){
  const neonKeepalive=()=>fetch('/__ping',{method:'GET',cache:'no-store'}).catch(()=>{});
@@ -758,7 +758,7 @@ function applyQualityMode(){document.documentElement?.classList?.toggle('quality
 applyQualityMode();
 // Data exposed for QA cannot mutate balances or force a result.
 restoreFavorites();restoreRecent();lastRenderedNavigation=null;render();renderRecent();
-window.NEON_INFO=Object.freeze({version:'1.7.9',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+window.NEON_INFO=Object.freeze({version:'1.8.0',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
 
 
 // Cross-window ownership check on every modifying UI action.

@@ -29,5 +29,5 @@ assert.equal(high.run('state.reserved'),3000000);
 assert.equal(high.run('spendGrouped(1000001,2)'),false);
 assert.equal(g.run('spinDuration(4200)'),4200);g.run("qualityMode='lite'");
 assert.equal(g.run('spinDuration(4200)'),380);
-assert.equal(g.run('GAMES.length'),44);assert.equal(g.run('window.NEON_INFO.version'),'1.7.9');
-console.log('PASS v1.7.9 atomic grouped bets, failing storage, high stakes, ECO timing, 44 games');
+assert.equal(g.run('GAMES.length'),44);assert.equal(g.run('window.NEON_INFO.version'),'1.8.0');
+console.log('PASS v1.8.0 atomic grouped bets, failing storage, high stakes, ECO timing, 44 games');

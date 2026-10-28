@@ -12,6 +12,6 @@ assert(js.includes('syncGameSearch();\n}'),'Favorites redraw without interruptin
 assert(java.includes("typeof setMobileNav==='function')setMobileNav(false)"),'Native back button cleans drawer state');
 assert(java.includes("document.body.classList.remove('nav-visible')"),'Fallback removes scroll lock');
 assert(css.includes('@media(prefers-reduced-motion:reduce)'),'Reduced motion');
-assert(js.includes("version:'1.7.9'"));
-assert(html.includes('1.7.9'));
-console.log('PASS v1.7.9 visual prefs rollback, navigation and Android back');
+assert(js.includes("version:'1.8.0'"));
+assert(html.includes('1.8.0'));
+console.log('PASS v1.8.0 visual prefs rollback, navigation and Android back');

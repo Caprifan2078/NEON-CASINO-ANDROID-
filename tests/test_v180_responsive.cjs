@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const css=fs.readFileSync('web/app.css','utf8');
+const html=fs.readFileSync('web/index.html','utf8');
+const js=fs.readFileSync('web/app.js','utf8');
+const native=fs.readFileSync('app/src/main/assets/web/app.css','utf8');
+assert.equal(css,native,'Android CSS must match web CSS');
+assert(css.includes('v1.8.0 responsive support'),'Shared responsive patch present');
+assert(css.includes('@media(max-width:280px)'),'240px layouts');
+assert(css.includes('@media(max-height:500px)'),'Landscape compact height');
+assert(css.includes('@media(min-width:1800px)'),'Desktop ultrawide');
+assert(css.includes('height:100dvh'),'Dynamic Android viewport');
+assert(css.includes('overscroll-behavior:contain'),'Scrollable dialogs and drawer');
+assert(css.includes('grid-template-columns:repeat(2,minmax(0,1fr))'),'Mode and control grids shrink');
+assert(html.includes('width=device-width')&&html.includes('viewport-fit=cover'));
+assert(html.includes('1.8.0')&&js.includes("version:'1.8.0'"));
+console.log('PASS responsive mobile, tablet, landscape, desktop invariants');
