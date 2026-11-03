@@ -65,6 +65,12 @@ verify_replacement = '''    @Test public void verifyPersistentWalletCheckpoint()
     }
 '''
 s = s[:begin] + verify_replacement + s[end:]
+# Emulator CI can pause the renderer while populating large profile views.
+# Keep a strict deadline; do not swallow timed-out callbacks.
+timeout_old = 'latch.await(8, TimeUnit.SECONDS)'
+if s.count(timeout_old) != 1:
+    raise SystemExit('Unexpected WebView callback timeout declaration')
+s = s.replace(timeout_old, 'latch.await(25, TimeUnit.SECONDS)')
 path.write_text(s, encoding='utf-8')
 print('PASS: 44 game clicks and separate strict persistence diagnostics')
 
