@@ -1,8 +1,30 @@
 from pathlib import Path
-f=Path("s5src/tests/android_smoke.sh")
-s=f.read_text()
-before="run_test stagePersistentWalletCheckpoint\n"
-after=before+"run_test verifyCheckpointBeforeUpgrade\n"
-if s.count(before)!=1: raise SystemExit("unexpected smoke script")
-f.write_text(s.replace(before,after))
-print("Pre-upgrade checkpoint test inserted")
+java = Path("s5src/app/src/androidTest/java/com/neon/play/simulator/NeonWebViewInstrumentedTest.java")
+smoke = Path("s5src/tests/android_smoke.sh")
+s = java.read_text()
+begin = "    @Test public void stagePersistentWalletCheckpoint()"
+marker = "    /** Read the checkpoint ONLY after CI has closed the previous process and reinstalled. */"
+assert s.count(begin) == 1 and s.count(marker) == 1
+a = s.index(begin)
+b = s.index(marker, a)
+stage = s[a:b]
+ending = "        }\n    }\n\n"
+assert stage.endswith(ending)
+stage = stage[:-len(ending)] + "            Thread.sleep(2500);\n" + ending
+probe = """    @Test public void verifyCheckpointBeforeUpgrade() throws InterruptedException {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            awaitGame(scenario);
+            assertEquals("Checkpoint missing before upgrade", "true", evaluate(scenario,
+                    "Boolean(localStorage.getItem('__neon_android_s4_cold_reinstall'))"));
+            assertEquals("Wallet missing before upgrade", "true", evaluate(scenario,
+                    "Boolean(localStorage.getItem('neon-casino-local-v1'))"));
+        }
+    }
+
+"""
+java.write_text(s[:a] + stage + probe + s[b:])
+t = smoke.read_text()
+needle = "run_test stagePersistentWalletCheckpoint\n"
+assert t.count(needle) == 1
+smoke.write_text(t.replace(needle, needle + "run_test verifyCheckpointBeforeUpgrade\n", 1))
+print("PASS: independent checkpoint check before APK upgrade enabled")
