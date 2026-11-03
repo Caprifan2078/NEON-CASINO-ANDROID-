@@ -5,6 +5,7 @@ on:
     paths:
       - '.ci/neon-s5-android-sources.zip'
       - '.github/workflows/qa-s5-android.yml'
+      - '.ci/run-s5-android-emulator.sh'
 permissions:
   contents: read
 jobs:
@@ -125,8 +126,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           emulator-boot-timeout: 600
-          script: |
-            bash -lc 'cd s5src && gradle --no-daemon :app:assembleDebugAndroidTest && bash tests/android_smoke.sh'
+          script: bash .ci/run-s5-android-emulator.sh
       - name: Upload APK ONLY after successful emulator installation
         uses: actions/upload-artifact@v4
         with:
