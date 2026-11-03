@@ -17,8 +17,8 @@ end = s.index(end_marker, start)
 replacement = '''            // Each click runs in a separate WebView event-loop task.
             // Verify all 44 panels and that navigation never changes the wallet.
             String walletBeforeNavigation = evaluate(scenario, "String(state.balance)");
-            assertEquals("44", evaluate(scenario,
-                    "String(document.querySelectorAll('#gameNav [data-action=nav]').length)"));
+            assertEquals("true", evaluate(scenario,
+                    "document.querySelectorAll('#gameNav [data-action=nav]').length===44"));
             for (int i = 0; i < 44; i++) {
                 String js = "(function(){var nav=document.querySelectorAll(" +
                         "'#gameNav [data-action=nav]')[" + i + "];" +
