@@ -126,9 +126,7 @@ jobs:
           profile: pixel_6
           emulator-boot-timeout: 600
           script: |
-            cd s5src
-            gradle --no-daemon :app:assembleDebugAndroidTest
-            bash tests/android_smoke.sh
+            bash -lc 'cd s5src && gradle --no-daemon :app:assembleDebugAndroidTest && bash tests/android_smoke.sh'
       - name: Upload APK ONLY after successful emulator installation
         uses: actions/upload-artifact@v4
         with:
