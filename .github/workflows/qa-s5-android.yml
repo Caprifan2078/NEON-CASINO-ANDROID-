@@ -6,6 +6,7 @@ on:
       - '.ci/neon-s5-android-sources.zip'
       - '.github/workflows/qa-s5-android.yml'
       - '.ci/run-s5-android-emulator.sh'
+      - '.ci/patch-s5-webview-test.py'
 permissions:
   contents: read
 jobs:
