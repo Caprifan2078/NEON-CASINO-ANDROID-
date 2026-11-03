@@ -20,7 +20,8 @@ jobs:
           - runner: windows-latest
             target: windows
             binary: neon-windows.exe
-          - runner: macos-15
+          # Match the GOARCH=amd64 build to a genuine Intel macOS runner.
+          - runner: macos-15-intel
             target: darwin
             binary: neon-macos
     runs-on: ${{ matrix.runner }}
