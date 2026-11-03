@@ -24,6 +24,9 @@ jobs:
       - name: Fix missing simulator bundle metadata in S5 snapshot
         shell: bash
         run: python3 .ci/fix-s5-ios-bundle-metadata.py
+      - name: Keep iPhone content within the status-bar and Dynamic Island safe area
+        shell: bash
+        run: python3 .ci/fix-s5-ios-safearea.py
       - name: Validate iOS version and cross-platform game resources
         shell: bash
         run: python3 s5platform/qa/check_ios_release_metadata.py
