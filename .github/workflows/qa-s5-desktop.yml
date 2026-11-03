@@ -16,14 +16,20 @@ jobs:
         include:
           - runner: ubuntu-latest
             target: linux
+            arch: amd64
             binary: neon-linux
           - runner: windows-latest
             target: windows
+            arch: amd64
             binary: neon-windows.exe
-          # Match the GOARCH=amd64 build to a genuine Intel macOS runner.
           - runner: macos-15-intel
             target: darwin
-            binary: neon-macos
+            arch: amd64
+            binary: neon-macos-intel
+          - runner: macos-15
+            target: darwin
+            arch: arm64
+            binary: neon-macos-apple-silicon
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
@@ -51,7 +57,7 @@ jobs:
           set -euo pipefail
           mkdir -p s5platform/dist
           cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
-          CGO_ENABLED=0 GOOS=${{ matrix.target }} GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o '../dist/${{ matrix.binary }}' main.go
+          CGO_ENABLED=0 GOOS=${{ matrix.target }} GOARCH=${{ matrix.arch }} go build -trimpath -ldflags='-s -w' -o '../dist/${{ matrix.binary }}' main.go
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -63,6 +69,6 @@ jobs:
       - name: Upload host-specific tested binary
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-${{ matrix.target }}-native-QA
+          name: NEON-${{ matrix.target }}-${{ matrix.arch }}-native-QA
           path: s5platform/dist/${{ matrix.binary }}
           if-no-files-found: error
