@@ -23,9 +23,7 @@ probe = """    @Test public void verifyCheckpointBeforeUpgrade() throws Interrup
 
 """
 updated_java = s[:a] + stage + probe + s[b:]
-# Slow emulators sometimes delay WebView callbacks; preserve fail-closed assertions.
-assert updated_java.count("latch.await(8, TimeUnit.SECONDS)") == 1
-updated_java = updated_java.replace("latch.await(8, TimeUnit.SECONDS)", "latch.await(25, TimeUnit.SECONDS)")
+# Callback timeout is managed only by patch-s5-webview-test.py.
 java.write_text(updated_java)
 t = smoke.read_text()
 needle = "run_test stagePersistentWalletCheckpoint\n"
