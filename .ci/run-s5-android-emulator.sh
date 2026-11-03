@@ -8,6 +8,7 @@ test -s app/build.gradle
 # This retains the 44 per-game checks but avoids one blocking 44-click JS task.
 cd "$repo_root"
 python3 .ci/patch-s5-webview-test.py
+python3 .ci/enable-preupgrade-probe.py
 cd "$repo_root/s5src"
 test -s tests/android_smoke.sh
 test -s app/build/outputs/apk/debug/app-debug.apk
