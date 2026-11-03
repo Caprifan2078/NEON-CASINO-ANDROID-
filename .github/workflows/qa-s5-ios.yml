@@ -21,6 +21,9 @@ jobs:
           mkdir -p s5platform
           unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
           test -f s5platform/ios/NEONROYALE.xcodeproj/project.pbxproj
+      - name: Fix missing simulator bundle metadata in S5 snapshot
+        shell: bash
+        run: python3 .ci/fix-s5-ios-bundle-metadata.py
       - name: Validate iOS version and cross-platform game resources
         shell: bash
         run: python3 s5platform/qa/check_ios_release_metadata.py
@@ -38,6 +41,8 @@ jobs:
           set -euo pipefail
           xcodebuild -project NEONROYALE.xcodeproj -scheme NEONROYALE -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/neon-build" CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/ios-build.log"
           test -d "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app"
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Fx com.neon.royale.ios
+          /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Fx NEONROYALE
       - name: Boot and install on first available iPhone simulator
         shell: bash
         run: |
