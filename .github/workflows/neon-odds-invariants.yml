@@ -1,0 +1,47 @@
+name: NEON RC exhaustive roulette SicBo Pick3 payout math
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/release-final-stress-20261104']
+    paths:
+      - '.ci/neon-odds-invariants.cjs'
+      - '.github/workflows/neon-odds-invariants.yml'
+permissions:
+  contents: read
+jobs:
+  math:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract unchanged actual project source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exhaustively validate roulette SicBo and Pick3 payouts BEFORE fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check .ci/neon-odds-invariants.cjs
+          node .ci/neon-odds-invariants.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee math-baseline.json
+      - name: Apply existing wallet reliability fix and validate payouts AGAIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          node .ci/neon-odds-invariants.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee math-fixed.json
+      - name: Retain exact math results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NEON-RC-exhaustive-odds-math-results
+          path: |
+            math-baseline.json
+            math-fixed.json
+          if-no-files-found: warn
