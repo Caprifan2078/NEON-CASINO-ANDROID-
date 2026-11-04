@@ -1,0 +1,112 @@
+# Only request from owner; Apple certs and registered devices are mandatory.
+name: NEON iPhone owner-signed Ad Hoc IPA
+on:
+  push:
+    branches: ['qa/release-signing-20261104']
+    paths: ['.ci/ios-release-request.txt']
+permissions:
+  contents: read
+jobs:
+  signed-ipa:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require all four Apple signing secrets
+        shell: bash
+        env:
+          APPLE_DIST_P12_B64: ${{ secrets.APPLE_DIST_P12_B64 }}
+          APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          APPLE_ADHOC_PROFILE_B64: ${{ secrets.APPLE_ADHOC_PROFILE_B64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_DIST_P12_B64" || -z "$APPLE_DIST_P12_PASSWORD" || -z "$APPLE_ADHOC_PROFILE_B64" || -z "$APPLE_TEAM_ID" ]]; then
+            echo 'ERROR: Apple Developer Team, Apple Distribution P12 and registered-device Ad Hoc profile secrets required.' >&2
+            exit 1
+          fi
+      - name: Extract existing iOS source and apply tested compatibility fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/fix-s5-ios-bundle-metadata.py
+          python3 .ci/fix-s5-ios-safearea.py
+          python3 s5platform/qa/check_ios_release_metadata.py
+      - name: Import Apple developer signing credentials securely
+        shell: bash
+        env:
+          APPLE_DIST_P12_B64: ${{ secrets.APPLE_DIST_P12_B64 }}
+          APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          APPLE_ADHOC_PROFILE_B64: ${{ secrets.APPLE_ADHOC_PROFILE_B64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/neon-ios-signing"
+          mkdir -m 700 "$private"
+          (umask 077; printf '%s' "$APPLE_DIST_P12_B64" | base64 -D > "$private/distribution.p12")
+          (umask 077; printf '%s' "$APPLE_ADHOC_PROFILE_B64" | base64 -D > "$private/profile.mobileprovision")
+          keychain="$private/neon.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security import "$private/distribution.p12" -k "$keychain" -P "$APPLE_DIST_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          security find-identity -v -p codesigning "$keychain" | grep -F 'Apple Distribution'
+          security cms -D -i "$private/profile.mobileprovision" > "$private/profile.plist"
+          uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$private/profile.plist")"
+          profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$private/profile.plist")"
+          profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$private/profile.plist")"
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$private/profile.plist" >/dev/null
+          [[ "$profile_team" == "$APPLE_TEAM_ID" ]] || { echo 'ERROR: Wrong Apple Team in provisioning profile.' >&2; exit 1; }
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$private/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+          echo "NEON_IOS_PROFILE_NAME=$profile_name" >> "$GITHUB_ENV"
+          echo "NEON_IOS_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Archive real-device-signed iOS app
+        shell: bash
+        working-directory: s5platform/ios
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild -project NEONROYALE.xcodeproj -scheme NEONROYALE \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/NEONROYALE.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$NEON_IOS_PROFILE_NAME" \
+            CODE_SIGN_IDENTITY='Apple Distribution' CODE_SIGNING_ALLOWED=YES archive
+          test -d "$RUNNER_TEMP/NEONROYALE.xcarchive/Products/Applications/NEONROYALE.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/NEONROYALE.xcarchive/Products/Applications/NEONROYALE.app"
+      - name: Export signed Ad Hoc IPA and verify embedded application
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,plistlib,pathlib
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'NEONExportOptions.plist'
+          cfg={'method':'ad-hoc','signingStyle':'manual','teamID':os.environ['APPLE_TEAM_ID'],
+               'provisioningProfiles':{'com.neon.royale.ios':os.environ['NEON_IOS_PROFILE_NAME']}}
+          with p.open('wb') as f:plistlib.dump(cfg,f)
+          PY
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/NEONROYALE.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/NEONExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/neon-ipa-export"
+          test -s "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa"
+          unzip -t "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa" >/dev/null
+          mkdir -p "$RUNNER_TEMP/neon-ipa-verify"
+          unzip -q "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa" 'Payload/NEONROYALE.app/*' -d "$RUNNER_TEMP/neon-ipa-verify"
+          codesign --verify --deep --strict "$RUNNER_TEMP/neon-ipa-verify/Payload/NEONROYALE.app"
+          shasum -a 256 "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa"
+      - name: Upload IPA only when Apple signature validation passed
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v1.8.9-APPLE-SIGNED-ADHOC-IPA
+          path: ${{ runner.temp }}/neon-ipa-export/NEONROYALE.ipa
+          retention-days: 30
+          if-no-files-found: error
