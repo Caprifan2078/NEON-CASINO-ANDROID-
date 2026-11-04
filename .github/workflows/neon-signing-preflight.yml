@@ -1,0 +1,33 @@
+name: NEON release-signing static preflight
+on:
+  push:
+    branches:
+      - 'qa/release-signing-20261104'
+    paths:
+      - '.ci/configure-android-release-signing.py'
+      - '.github/workflows/neon-owner-signed-android.yml'
+      - '.github/workflows/neon-signing-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and exercise signing gate without access to private keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .ci/configure-android-release-signing.py
+          tmp="$(mktemp -d)"
+          printf "plugins { id 'com.android.application' }\nandroid { defaultConfig {} }\n" > "$tmp/build.gradle"
+          python3 .ci/configure-android-release-signing.py "$tmp/build.gradle"
+          grep -Fq 'NEON_SIGNED_RELEASE_BLOCK_V1' "$tmp/build.gradle"
+          grep -Fq "signingConfigs.maybeCreate('neonRealRelease')" "$tmp/build.gradle"
+          grep -Fq 'releaseVariant.debuggable = false' "$tmp/build.gradle"
+          if python3 .ci/configure-android-release-signing.py "$tmp/build.gradle"; then
+            echo 'ERROR: double-injection check did not fail closed' >&2
+            exit 1
+          fi
+          test -s .ci/neon-s5-android-sources.zip
+          echo 'PASS: no release secrets were required for this preflight'
