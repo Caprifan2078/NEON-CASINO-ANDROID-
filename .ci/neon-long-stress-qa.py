@@ -56,7 +56,7 @@ def run(exe,out):
                                 throw Error('Nonzero reserved or unsafe balance at '+i);
                         }
                         return end;
-                    }""",{"batch":batch},timeout=30000)
+                    }""",{"batch":batch})
                     assert completed==(batch+1)*250
                     report["rounds"]=completed
                 result=page.evaluate("""() => ({
@@ -92,7 +92,7 @@ def run(exe,out):
                         }
                         return {visits,width:innerWidth,scroll:document.documentElement.scrollWidth,
                             balance:state.balance,rounds:state.stats.rounds};
-                    }""",{"loops":loops},timeout=60000)
+                    }""",{"loops":loops})
                     assert ui["visits"]==44*loops
                     assert ui["balance"]==starting["balance"]
                     assert ui["rounds"]==starting["rounds"]+rounds
