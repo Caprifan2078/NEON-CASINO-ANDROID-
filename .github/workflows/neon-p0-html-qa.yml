@@ -80,7 +80,7 @@ jobs:
                       return JSON.stringify(x);
                   }""")
                   assert page.evaluate("(raw)=>loadBackup(raw)",poisoned) is True
-                  assert page.evaluate("state.activity[0].game")==='', 'Poisoned backup metadata was not sanitized'
+                  assert page.evaluate("state.activity[0].game") == "", 'Poisoned backup metadata was not sanitized'
                   assert page.evaluate("restorePreImportBackup()") is True
                   assert page.evaluate("String(state.balance)")==initial, 'Offline backup undo changed wallet'
                   print("PASS: offline JSON import rejects malicious nested text conversion and undo preserves wallet")
