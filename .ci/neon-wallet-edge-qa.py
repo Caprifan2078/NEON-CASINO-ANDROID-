@@ -159,7 +159,9 @@ def main(exe, out):
 if __name__=="__main__":
     exe=Path(sys.argv[1]).resolve();out=Path(sys.argv[2]).resolve();out.mkdir(parents=True,exist_ok=True)
     try:r=main(exe,out)
-    except Exception as exc:r={"status":"FAIL","error":repr(exc)}
+    except Exception as exc:
+        import traceback
+        r={"status":"FAIL","error":repr(exc),"traceback":traceback.format_exc()}
     (out/"P0_wallet_edge_qa.json").write_text(json.dumps(r,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps(r,ensure_ascii=False,indent=2))
     if r["status"]!="PASS":sys.exit(1)
