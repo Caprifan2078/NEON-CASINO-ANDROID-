@@ -1,0 +1,151 @@
+# Build iOS project from the complete source tree. Does NOT create a signed IPA.
+name: NEON safe backup import iPhone and iPad Simulator QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/save-migration-fuzz-20261105']
+    paths:
+      - '.github/workflows/neon-safe-import-ios-qa.yml'
+      - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/patch-p0-import-text.py'
+permissions:
+  contents: read
+jobs:
+  ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: iPhone
+            label: iphone
+          - device: iPad
+            label: ipad
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact S5 desktop/iOS snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -f s5platform/ios/NEONROYALE.xcodeproj/project.pbxproj
+      - name: Fix missing simulator bundle metadata in S5 snapshot
+        shell: bash
+        run: python3 .ci/fix-s5-ios-bundle-metadata.py
+      - name: Keep iPhone content within the status-bar and Dynamic Island safe area
+        shell: bash
+        run: python3 .ci/fix-s5-ios-safearea.py
+      - name: Fix source lease ownership across iOS, Android and desktop JS copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-p0-import-text.py s5platform
+      - name: Validate iOS version and cross-platform game resources
+        shell: bash
+        run: python3 s5platform/qa/check_ios_release_metadata.py
+      - name: Verify iOS project and Swift syntax
+        shell: bash
+        working-directory: s5platform/ios
+        run: |
+          set -euo pipefail
+          plutil -lint NEONROYALE.xcodeproj/project.pbxproj NEONROYALE/Info.plist
+          xcodebuild -list -project NEONROYALE.xcodeproj
+      - name: Build iOS simulator app
+        shell: bash
+        working-directory: s5platform/ios
+        run: |
+          set -euo pipefail
+          xcodebuild -project NEONROYALE.xcodeproj -scheme NEONROYALE -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/neon-build" CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/ios-build.log"
+          test -d "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app"
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Fx com.neon.royale.ios
+          /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Fx NEONROYALE
+      - name: Confirm app supports both iPhone and iPad device families
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/libexec/PlistBuddy -c 'Print UIDeviceFamily' "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Eq '(^|[^0-9])1([^0-9]|$)'
+          /usr/libexec/PlistBuddy -c 'Print UIDeviceFamily' "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app/Info.plist" | grep -Eq '(^|[^0-9])2([^0-9]|$)'
+      - name: Boot, install and verify on first available ${{ matrix.device }} simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - "$RUNNER_TEMP/devices.json" "$RUNNER_TEMP/device-id" <<'PY'
+          import json,sys
+          devices=json.load(open(sys.argv[1]))['devices']
+          phones=[d for group in devices.values() for d in group if d.get('isAvailable',False) and '${{ matrix.device }}' in d.get('name','')]
+          if not phones: raise SystemExit('No available ${{ matrix.device }} simulator')
+          open(sys.argv[2],'w').write(phones[0]['udid'])
+          PY
+          device="$(cat "$RUNNER_TEMP/device-id")"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl install "$device" "$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator/NEONROYALE.app"
+          xcrun simctl launch "$device" com.neon.royale.ios -NEON_QA_SMOKE
+          # A successful launch is not proof that bundled JS actually initialized.
+          ready=0
+          for attempt in $(seq 1 30); do
+            if xcrun simctl spawn "$device" log show --last 3m --style compact \
+                --predicate 'eventMessage CONTAINS "NEON_IOS_READY_v1.8.9_games44"' 2>/dev/null \
+                | grep -Fq 'NEON_IOS_READY_v1.8.9_games44'; then
+              ready=1; break
+            fi
+            sleep 2
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            echo 'FAIL: iOS app launched but 44-game JavaScript readiness was not observed' >&2
+            xcrun simctl spawn "$device" log show --last 3m --style compact \
+                --predicate 'eventMessage CONTAINS "NEON_IOS_STARTUP_FAILED"' 2>/dev/null | tail -25 || true
+            exit 1
+          fi
+          echo 'PASS: ${{ matrix.device }} simulator loaded NEON 1.8.9 and all 44 games'
+          xcrun simctl io "$device" screenshot "$RUNNER_TEMP/neon-ipad-first-screen.png"
+          # A second cold launch must see localStorage data written by the first.
+          xcrun simctl terminate "$device" com.neon.royale.ios
+          xcrun simctl launch "$device" com.neon.royale.ios -NEON_QA_SMOKE
+          persisted=0
+          for attempt in $(seq 1 30); do
+            if xcrun simctl spawn "$device" log show --last 3m --style compact \
+                --predicate 'eventMessage CONTAINS "NEON_IOS_STORAGE_PERSISTED"' 2>/dev/null \
+                | grep -Fq 'NEON_IOS_STORAGE_PERSISTED'; then
+              persisted=1; break
+            fi
+            sleep 2
+          done
+          if [[ "$persisted" -ne 1 ]]; then
+            echo 'FAIL: iOS localStorage did not persist across cold launch' >&2
+            exit 1
+          fi
+          echo 'PASS: ${{ matrix.device }} simulator kept local data after cold restart' 
+      - name: Verify screenshot and package installable Simulator app plus fixed Xcode sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/neon-ipad-first-screen.png"
+          app_dir="$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator"
+          test -d "$app_dir/NEONROYALE.app"
+          (
+            cd "$app_dir"
+            ditto -c -k --sequesterRsrc --keepParent NEONROYALE.app "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip"
+          )
+          (
+            cd s5platform
+            zip -qr "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip" ios/
+          )
+          unzip -t "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip" >/dev/null
+          unzip -t "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip" >/dev/null
+          shasum -a 256 "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip" "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip"
+      - name: Upload screenshot and build log for manual UI review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-JSON-HARDENED-${{ matrix.label }}-simulator-QA
+          path: |
+            ${{ runner.temp }}/ios-build.log
+            ${{ runner.temp }}/neon-ipad-first-screen.png
+            ${{ runner.temp }}/NEONROYALE-iOS-Simulator-ONLY.zip
+            ${{ runner.temp }}/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip
+          if-no-files-found: warn
