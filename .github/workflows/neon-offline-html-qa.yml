@@ -53,14 +53,16 @@ jobs:
               try:
                   page=context.pages[0] if context.pages else context.new_page()
                   page.goto(url,wait_until="domcontentloaded",timeout=30000)
-                  page.wait_for_function("document.querySelectorAll('#gameNav [data-action=nav]').length===44",timeout=20000)
+                  page.locator('#gameNav [data-action=nav]').first.wait_for(state='attached',timeout=20000)
+                  assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
                   initial=page.evaluate("String(state.balance)")
                   results=page.evaluate("""() => [...document.querySelectorAll('#gameNav [data-action=nav]')].map((n)=>{ const id=n.dataset.game; n.click(); return state.game===id && Boolean(document.querySelector('#gameArea')?.children.length);})""")
                   assert len(results)==44 and all(results), 'Not all 44 game panels rendered'
                   assert page.evaluate("String(state.balance)")==initial,'Navigation unexpectedly changed wallet'
                   page.evaluate("() => {save();localStorage.setItem('__neon_standalone_check','preserved')}")
                   page.reload(wait_until="domcontentloaded")
-                  page.wait_for_function("document.querySelectorAll('#gameNav [data-action=nav]').length===44",timeout=20000)
+                  page.locator('#gameNav [data-action=nav]').first.wait_for(state='attached',timeout=20000)
+                  assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
                   assert page.evaluate("localStorage.getItem('__neon_standalone_check')")=="preserved", 'localStorage not persisted on reload'
                   assert page.evaluate("String(state.balance)")==initial,'Wallet changed on reload'
                   page.screenshot(path="site/NEON_OFFLINE_MOBILE_QA.png",full_page=True)
