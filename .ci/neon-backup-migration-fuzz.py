@@ -110,6 +110,37 @@ def run(exe,out):
                 }""")
                 assert checked['rejected']==checked['expected'] and checked['changed']==0 and not checked['accepted'],checked
                 report['checks'].append(str(checked['expected'])+' invalid save shapes rejected without changing wallet')
+                # A specially crafted JSON object can override its toString method.
+                # Before the P0 fix, safeActivity/safeJournal String(value) throws and
+                # aborts import. Both wallets, their journals, and replay must survive.
+                poisoned=page.evaluate("""() => {
+                  const v=snapshot(),bomb={toString:null};
+                  const rec={at:Date.now(),game:bomb,stake:2,payout:3,detail:bomb,
+                    replay:{type:'roulette',number:17,bets:[{type:'number',value:bomb,amount:2}]}};
+                  for(const mode of ['free','daily']){
+                    v.profiles[mode].activity=[{game:bomb,detail:bomb,profit:0,at:bomb}];
+                    v.profiles[mode].journal=[rec];
+                  }
+                  return JSON.stringify(v);
+                }""")
+                old_balance=page.evaluate('state.balance')
+                assert page.evaluate('(raw)=>loadBackup(raw)',poisoned) is True
+                result=page.evaluate("""() => ({
+                    balance:state.balance,
+                    freeActivity:profileSnapshots.free.activity[0],
+                    freeJournal:profileSnapshots.free.journal[0],
+                    dailyActivity:profileSnapshots.daily.activity[0],
+                    dailyJournal:profileSnapshots.daily.journal[0]
+                })""")
+                assert result['balance']==old_balance
+                assert result['freeActivity']['game']=='' and result['freeActivity']['detail']==''
+                assert result['dailyActivity']['game']=='' and result['dailyActivity']['detail']==''
+                assert result['freeJournal']['game']=='' and result['freeJournal']['detail']==''
+                assert result['dailyJournal']['game']=='' and result['dailyJournal']['detail']==''
+                assert result['freeJournal']['replay'] is None and result['dailyJournal']['replay'] is None
+                assert page.evaluate('restorePreImportBackup()') is True
+                assert page.evaluate('state.balance')==old_balance
+                report['checks'].append('Poisoned toString objects in BOTH wallet journals/activities/replays sanitized; import and undo durable')
                 # An accepted save might legitimately contain malformed *optional*
                 # statistics from old clients. Sanitize, do not execute nested values.
                 sanitized=page.evaluate("""() => {
