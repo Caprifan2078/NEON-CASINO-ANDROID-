@@ -1,0 +1,107 @@
+# A distributable .app structure; uses ad-hoc signature for local QA only.
+# Publicly trusted macOS distribution still needs Developer ID + notarization.
+name: NEON macOS app bundles QA (Intel and Apple Silicon)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/release-signing-20261104']
+    paths: ['.github/workflows/neon-macos-app-bundles.yml']
+permissions:
+  contents: read
+jobs:
+  mac-app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: amd64
+            label: intel
+          - runner: macos-15
+            arch: arm64
+            label: apple-silicon
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact tested source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/main.go
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Validate source and compile native macOS launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=darwin GOARCH=${{ matrix.arch }} go build -trimpath -ldflags='-s -w' -o '../dist/neon-macos' main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test executable on real macOS before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 s5platform/qa/verify_desktop_runtime.py s5platform/dist/neon-macos
+      - name: Create macOS .app, check architecture and apply local QA signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          app='s5platform/dist/NEON CASINO ROYALE.app'
+          mkdir -p "$app/Contents/MacOS"
+          cp s5platform/dist/neon-macos "$app/Contents/MacOS/NEONROYALE"
+          chmod 755 "$app/Contents/MacOS/NEONROYALE"
+          cat > "$app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key><string>en</string>
+            <key>CFBundleExecutable</key><string>NEONROYALE</string>
+            <key>CFBundleIdentifier</key><string>com.neon.royale.macos</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>NEON CASINO ROYALE</string>
+            <key>CFBundleDisplayName</key><string>NEON CASINO ROYALE</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.8.9</string>
+            <key>CFBundleVersion</key><string>190</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          plutil -lint "$app/Contents/Info.plist"
+          file "$app/Contents/MacOS/NEONROYALE"
+          lipo -info "$app/Contents/MacOS/NEONROYALE" | grep -Fq "${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}"
+          codesign --force --sign - --timestamp=none "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          echo "WARNING: ad-hoc-signed QA build, not Developer ID notarized" > s5platform/dist/SIGNING_STATUS.txt
+      - name: Verify actual .app executable and all eight game resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 s5platform/qa/verify_desktop_runtime.py 's5platform/dist/NEON CASINO ROYALE.app/Contents/MacOS/NEONROYALE'
+      - name: Pack transferable macOS app preserving executable bits
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/dist
+          ditto -c -k --sequesterRsrc --keepParent 'NEON CASINO ROYALE.app' 'NEON_CASINO_v1.8.9_macos_${{ matrix.label }}_QA.zip'
+          unzip -t 'NEON_CASINO_v1.8.9_macos_${{ matrix.label }}_QA.zip' >/dev/null
+          shasum -a 256 'NEON_CASINO_v1.8.9_macos_${{ matrix.label }}_QA.zip'
+      - name: Upload macOS app bundle (QA, not notarized)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-macOS-${{ matrix.label }}-APP-QA
+          path: |
+            s5platform/dist/NEON_CASINO_v1.8.9_macos_${{ matrix.label }}_QA.zip
+            s5platform/dist/SIGNING_STATUS.txt
+          if-no-files-found: error
