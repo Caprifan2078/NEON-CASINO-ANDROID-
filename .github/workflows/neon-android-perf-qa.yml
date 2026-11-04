@@ -2,10 +2,11 @@ name: NEON Android optimized-icons regression QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/bughunt-wallet-20261104']
+    branches: ['qa/save-migration-fuzz-20261105']
     paths:
       - '.ci/optimize-s5-icons.py'
       - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/patch-p0-import-text.py'
       - '.github/workflows/neon-android-perf-qa.yml'
 permissions:
   contents: read
@@ -67,6 +68,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5src
+      - name: Apply P0 safe backup text handling to both Android asset copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-import-text.py s5src
       - name: Reduce icon footprint with bounded perceptual loss
         shell: bash
         run: |
@@ -78,7 +84,7 @@ jobs:
           python3 tools/check_project.py
           node --check web/app.js
           npm test
-      - name: Build OPTIMIZED versionCode 190 with unchanged signer and unchanged JS
+      - name: Build QA versionCode 190 with same signer and hardened backup import JS
         working-directory: s5src
         shell: bash
         run: |
@@ -91,7 +97,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "versionCode='190'"
           echo "OPTIMIZED_APK_BYTES=$(stat -c%s "$apk")" >> "$GITHUB_ENV"
           sha256sum "$apk"
-      - name: Confirm net APK saving is material and source is identical except artwork
+      - name: Check APK saving after tested wallet/import fixes and artwork optimization
         shell: bash
         run: |
           set -euo pipefail
@@ -99,7 +105,7 @@ jobs:
           saving=$((ORIGINAL_APK_BYTES - OPTIMIZED_APK_BYTES))
           test "$saving" -ge 70000 || { echo 'FAIL: smaller than 70 KiB minimum; optimization not shipped' >&2; exit 1; }
           echo "SAVED_BYTES=$saving" >> "$GITHUB_ENV"
-          printf 'PASS: saved %s bytes without touching JS or game logic\n' "$saving"
+          printf 'PASS: saved %s bytes while including verified wallet/import safety fixes\n' "$saving"
       - name: Allow Android emulator KVM acceleration
         run: |
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
@@ -117,7 +123,7 @@ jobs:
       - name: Publish smaller APK only if all emulator regression tests pass
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-v1.8.9-ANDROID-OPTIMIZED-FRESH-QA
+          name: NEON-v1.8.9-ANDROID-P0-IMPORT-HARDENED-FRESH-QA
           path: s5src/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
