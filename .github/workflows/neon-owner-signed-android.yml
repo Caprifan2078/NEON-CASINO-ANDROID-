@@ -106,6 +106,10 @@ jobs:
           if [[ -n "$NEON_RELEASE_KEYSTORE_PATH" ]]; then
             rm -f -- "$NEON_RELEASE_KEYSTORE_PATH"
           fi
+      - name: Enable hardware acceleration for emulator
+        shell: bash
+        run: |
+          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
       - name: Install and launch the RELEASE APK on a real Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
