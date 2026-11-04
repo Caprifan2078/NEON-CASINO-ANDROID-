@@ -2,11 +2,12 @@ name: NEON P0-stale-lease-fixed standalone HTML QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/bughunt-wallet-20261104']
+    branches: ['qa/save-migration-fuzz-20261105']
     paths:
       - '.ci/build-standalone-offline.py'
       - '.github/workflows/neon-p0-html-qa.yml'
       - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/patch-p0-import-text.py'
 permissions:
   contents: read
 jobs:
@@ -27,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5src
+          python3 .ci/patch-p0-import-text.py s5src
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -57,6 +59,7 @@ jobs:
               context=pw.chromium.launch_persistent_context(user_data_dir=tempfile.mkdtemp(prefix="neon-offline-qa-"),executable_path=chrome,headless=True,args=["--no-sandbox"],viewport={"width":390,"height":844})
               try:
                   page=context.pages[0] if context.pages else context.new_page()
+                  page.on('dialog',lambda d:d.accept())
                   page.goto(url,wait_until="domcontentloaded",timeout=30000)
                   page.locator('#gameNav [data-action=nav]').first.wait_for(state='attached',timeout=20000)
                   assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
@@ -70,6 +73,17 @@ jobs:
                   assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
                   assert page.evaluate("localStorage.getItem('__neon_standalone_check')")=="preserved", 'localStorage not persisted on reload'
                   assert page.evaluate("String(state.balance)")==initial,'Wallet changed on reload'
+                  poisoned=page.evaluate("""() => {
+                      const x=snapshot();
+                      const bad={toString:null};
+                      x.profiles.free.activity=[{game:bad,detail:bad,profit:0,at:bad}];
+                      return JSON.stringify(x);
+                  }""")
+                  assert page.evaluate("(raw)=>loadBackup(raw)",poisoned) is True
+                  assert page.evaluate("state.activity[0].game")==='', 'Poisoned backup metadata was not sanitized'
+                  assert page.evaluate("restorePreImportBackup()") is True
+                  assert page.evaluate("String(state.balance)")==initial, 'Offline backup undo changed wallet'
+                  print("PASS: offline JSON import rejects malicious nested text conversion and undo preserves wallet")
                   page.screenshot(path="site/NEON_OFFLINE_MOBILE_QA.png",full_page=True)
                   print("PASS: actual offline HTML loaded all 44 panels and preserved wallet on reload")
               finally:context.close()
@@ -78,6 +92,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-v1.8.9-P0-LEASE-FIX-standalone-HTML-tested
+          name: NEON-v1.8.9-P0-SAFE-IMPORT-standalone-HTML-tested
           path: site/
           if-no-files-found: warn
