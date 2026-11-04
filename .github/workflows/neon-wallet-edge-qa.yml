@@ -20,6 +20,11 @@ jobs:
           set -euo pipefail
           mkdir -p s5platform
           unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+      - name: Apply fail-closed stale-lease cleanup fix to extracted source (not main)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
