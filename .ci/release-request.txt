@@ -1,0 +1,2 @@
+NEON CASINO ROYALE v1.8.9 release-candidate signing verification requested on 2026-11-04.
+Do not publish or modify main. Build only with secret-backed permanent signing and verify on Android emulator.
