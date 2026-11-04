@@ -103,6 +103,12 @@ jobs:
           unzip -q "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa" 'Payload/NEONROYALE.app/*' -d "$RUNNER_TEMP/neon-ipa-verify"
           codesign --verify --deep --strict "$RUNNER_TEMP/neon-ipa-verify/Payload/NEONROYALE.app"
           shasum -a 256 "$RUNNER_TEMP/neon-ipa-export/NEONROYALE.ipa"
+      - name: Remove temporary imported Apple private identity
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/neon-ios-signing/neon.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/neon-ios-signing"
       - name: Upload IPA only when Apple signature validation passed
         uses: actions/upload-artifact@v4
         with:
