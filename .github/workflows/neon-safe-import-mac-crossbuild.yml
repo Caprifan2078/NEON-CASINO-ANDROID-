@@ -1,0 +1,94 @@
+name: NEON P0 JSON-safe macOS Intel + ARM64 cross-build QA (unsigned)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/save-migration-fuzz-20261105']
+    paths: ['.github/workflows/neon-safe-import-mac-crossbuild.yml']
+permissions:
+  contents: read
+jobs:
+  crossbuild-both:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack v1.8.9 and apply BOTH verified P0 data-safety patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-p0-import-text.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Run native Go tests and build x64 Linux plus both macOS architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform/dist
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-linux main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-darwin-amd64 main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-darwin-arm64 main.go
+          cd ../..
+          python3 s5platform/qa/verify_desktop_runtime.py s5platform/dist/neon-linux
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify Mach-O 64-bit architecture and bundle both unsigned QA .apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipInfo,ZipFile,ZIP_DEFLATED
+          import struct,plistlib,hashlib
+          dist=Path('s5platform/dist')
+          for label,arch,cputype in [('Intel','amd64',0x01000007),('AppleSilicon','arm64',0x0100000c)]:
+              source=dist/('neon-darwin-'+arch)
+              payload=source.read_bytes()
+              assert payload[:4]==bytes.fromhex('cffaedfe'),label+' invalid Mach-O 64 magic'
+              assert struct.unpack_from('<I',payload,4)[0]==cputype,label+' wrong cpu architecture'
+              assert len(payload)>1000000
+              app='NEON CASINO ROYALE.app'
+              info=plistlib.dumps({
+                  'CFBundleExecutable':'NEONROYALE',
+                  'CFBundleIdentifier':'com.neon.royale.macos',
+                  'CFBundleInfoDictionaryVersion':'6.0',
+                  'CFBundleName':'NEON CASINO ROYALE',
+                  'CFBundlePackageType':'APPL',
+                  'CFBundleShortVersionString':'1.8.9',
+                  'CFBundleVersion':'190',
+                  'LSMinimumSystemVersion':'12.0'
+              })
+              output=dist/('NEON_P0_SAFE_IMPORT_MAC_'+label+'_CROSSBUILT_UNSIGNED.zip')
+              with ZipFile(output,'w',compression=ZIP_DEFLATED,compresslevel=8) as z:
+                  for path,data,mode in [
+                      (app+'/Contents/Info.plist',info,0o100644),
+                      (app+'/Contents/MacOS/NEONROYALE',payload,0o100755)]:
+                      zi=ZipInfo(path);zi.create_system=3;zi.external_attr=mode<<16;zi.compress_type=ZIP_DEFLATED
+                      z.writestr(zi,data,compress_type=ZIP_DEFLATED,compresslevel=8)
+              with ZipFile(output) as z:
+                  assert z.testzip() is None
+                  assert z.read(app+'/Contents/MacOS/NEONROYALE')==payload
+              print(label, 'PASS cross-build Mach-O',arch,'bytes',len(payload),'sha256',hashlib.sha256(payload).hexdigest())
+          (dist/'QA_UNSIGNED_NO_NATIVE_MAC_TEST.txt').write_text(
+              'NEON P0 JSON-safe macOS Intel and Apple Silicon QA builds.\n'
+              'Both Mach-O architectures validated; Linux native runtime checks passed.\n'
+              'These binaries were CROSS-BUILT on Ubuntu, not executed on a Mac.\n'
+              'NOT signed by Apple and NOT notarized. macOS may block launch.\n'
+              'Existing user data must be backed up before installing new packages.\n')
+          PY
+      - name: Retain both clearly labeled macOS QA archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-SAFE-IMPORT-MAC-INTEL-ARM64-CROSSBUILT-QA
+          path: |
+            s5platform/dist/NEON_P0_SAFE_IMPORT_MAC_*_CROSSBUILT_UNSIGNED.zip
+            s5platform/dist/QA_UNSIGNED_NO_NATIVE_MAC_TEST.txt
+          if-no-files-found: error
+          retention-days: 30
