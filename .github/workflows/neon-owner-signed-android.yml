@@ -96,7 +96,7 @@ jobs:
             exit 1
           fi
           unzip -t "$apk" >/dev/null
-          unzip -l "$apk" | grep -Fq 'assets/web/app.js'
+          unzip -Z1 "$apk" | grep -Fx 'assets/web/app.js'
           sha256sum "$apk"
           printf '%s\n' 'Signed using NEON release cert SHA256 B1:79:82:4F:72:7D:7A:C9:5E:0C:01:59:1D:25:08:3E:93:A2:F8:90:80:A5:9E:5B:78:80:F6:19:68:81:00:A2' > app/build/outputs/apk/release/SIGNATURE_STATUS.txt
       - name: Publish signed APK only after all release gates pass
