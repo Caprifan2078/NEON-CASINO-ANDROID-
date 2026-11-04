@@ -5,6 +5,7 @@ on:
     branches: ['qa/performance-safety-20261104']
     paths:
       - '.ci/optimize-s5-icons.py'
+      - '.ci/patch-p0-lease-cleanup.py'
       - '.github/workflows/neon-android-perf-qa.yml'
 permissions:
   contents: read
@@ -61,6 +62,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Apply P0 owner-token lease cleanup to browser and bundled Android JS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5src
       - name: Reduce icon footprint with bounded perceptual loss
         shell: bash
         run: |
