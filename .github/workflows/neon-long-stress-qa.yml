@@ -1,0 +1,57 @@
+name: NEON RC long stress 5000 rounds and 4400 UI renders
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/release-final-stress-20261104']
+    paths:
+      - '.ci/neon-long-stress-qa.py'
+      - '.github/workflows/neon-long-stress-qa.yml'
+permissions:
+  contents: read
+jobs:
+  long-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack frozen audited desktop/browser project and apply confirmed wallet fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Go source tests and native Linux app build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-linux main.go
+      - name: Install real browser test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Stress 5000 committed rounds, 4400 navigation renders, reload recovery and heap ceiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-long-stress-qa.py s5platform/dist/neon-linux stress-evidence
+      - name: Retain all stress evidence (including failures)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NEON-RC-long-stress-report
+          path: stress-evidence/
+          if-no-files-found: warn
+          retention-days: 30
