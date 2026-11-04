@@ -3,9 +3,10 @@ name: NEON Windows and Linux P0 wallet fix QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/bughunt-wallet-20261104']
+    branches: ['qa/save-migration-fuzz-20261105']
     paths:
       - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/patch-p0-import-text.py'
       - '.github/workflows/neon-native-p0-qa.yml'
 permissions:
   contents: read
@@ -42,6 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-p0-import-text.py s5platform
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -70,6 +72,6 @@ jobs:
       - name: Upload host-specific tested binary
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-OWNER-LEASE-${{ matrix.target }}-${{ matrix.arch }}-native-QA
+          name: NEON-P0-SAFE-IMPORT-${{ matrix.target }}-${{ matrix.arch }}-native-QA
           path: s5platform/dist/${{ matrix.binary }}
           if-no-files-found: error
