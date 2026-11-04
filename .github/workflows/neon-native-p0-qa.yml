@@ -1,0 +1,75 @@
+# Put entire STABILIZATION package in the repo root to enable this workflow.
+name: NEON Windows and Linux P0 wallet fix QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/bughunt-wallet-20261104']
+    paths:
+      - '.ci/patch-p0-lease-cleanup.py'
+      - '.github/workflows/neon-native-p0-qa.yml'
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux
+            arch: amd64
+            binary: neon-linux
+          - runner: windows-latest
+            target: windows
+            arch: amd64
+            binary: neon-windows.exe
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact S5 desktop/iOS snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -f s5platform/BUILD_READY_WINDOWS_LAUNCHER/main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply verified P0 owner-token cleanup to packaged browser JS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Test fingerprint coverage and reject stale desktop builds
+        shell: bash
+        working-directory: s5platform/BUILD_READY_WINDOWS_LAUNCHER
+        run: |
+          set -euo pipefail
+          go test -v ./...
+          go vet ./...
+      - name: Build native executable from embedded game assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform/dist
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          CGO_ENABLED=0 GOOS=${{ matrix.target }} GOARCH=${{ matrix.arch }} go build -trimpath -ldflags='-s -w' -o '../dist/${{ matrix.binary }}' main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run real native server, assets, Host protection and hung-port recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          python s5platform/qa/verify_desktop_runtime.py 's5platform/dist/${{ matrix.binary }}'
+      - name: Upload host-specific tested binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-OWNER-LEASE-${{ matrix.target }}-${{ matrix.arch }}-native-QA
+          path: s5platform/dist/${{ matrix.binary }}
+          if-no-files-found: error
