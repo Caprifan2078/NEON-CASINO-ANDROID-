@@ -1,0 +1,101 @@
+name: NEON P0 Apple Silicon cross-build on Ubuntu (fallback QA)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/bughunt-wallet-20261104']
+    paths: ['.github/workflows/neon-p0-arm-ubuntu-fallback.yml']
+permissions:
+  contents: read
+jobs:
+  darwin-arm64-cross:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract audited source and apply P0 wallet fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test same embedded application on Linux and cross compile Darwin ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform/dist
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test -v ./...
+          go vet ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-linux main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-macos-arm64 main.go
+          cd ../..
+          python3 s5platform/qa/verify_desktop_runtime.py s5platform/dist/neon-linux
+      - name: Check Mach-O header and package a standalone QA .app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform/dist
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile,ZipInfo,ZIP_DEFLATED
+          import struct,plistlib,hashlib
+          dist=Path('s5platform/dist')
+          exe=dist/'neon-macos-arm64'
+          data=exe.read_bytes()
+          assert data[:4]==bytes.fromhex('cffaedfe'),f'Not little-endian 64-bit Mach-O: {data[:4].hex()}'
+          cputype=struct.unpack_from('<I',data,4)[0]
+          assert cputype==0x0100000c, f'Unexpected Mach-O cputype: {cputype:#x}'
+          assert len(data)>1000000
+          app=dist/'NEON CASINO ROYALE.app'
+          (app/'Contents/MacOS').mkdir(parents=True,exist_ok=True)
+          binary=app/'Contents/MacOS/NEONROYALE'
+          binary.write_bytes(data)
+          binary.chmod(0o755)
+          info={
+            'CFBundleExecutable':'NEONROYALE','CFBundleIdentifier':'com.neon.royale.macos',
+            'CFBundleInfoDictionaryVersion':'6.0','CFBundleName':'NEON CASINO ROYALE',
+            'CFBundlePackageType':'APPL','CFBundleShortVersionString':'1.8.9',
+            'CFBundleVersion':'190','LSMinimumSystemVersion':'12.0'
+          }
+          (app/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+          warning=dist/'QA_STATUS_RU.txt'
+          warning.write_text(
+            'NEON v1.8.9 Apple Silicon ARM64 cross-build.\n'
+            'Linux native runtime and bundled asset checks PASS.\n'
+            'ARM64 macOS runtime NOT tested on an Apple Silicon Mac.\n'
+            'NO Apple code signing and NO notarization. macOS may refuse launch.\n'
+            'Do not replace an existing installation without a user backup.\n'
+          )
+          output=dist/'NEON_Mac_AppleSilicon_P0_CROSSBUILT_UNVERIFIED.zip'
+          with ZipFile(output,'w',compression=ZIP_DEFLATED,compresslevel=8) as z:
+            for p in sorted(app.rglob('*')):
+              if not p.is_file():continue
+              arc=str(p.relative_to(dist))
+              zi=ZipInfo(arc)
+              zi.compress_type=ZIP_DEFLATED
+              zi.create_system=3
+              zi.external_attr=((0o100755 if p==binary else 0o100644)<<16)
+              z.writestr(zi,p.read_bytes(),compress_type=ZIP_DEFLATED,compresslevel=8)
+          with ZipFile(output) as z:
+            assert z.testzip() is None
+            assert z.read('NEON CASINO ROYALE.app/Contents/MacOS/NEONROYALE')==data
+          (dist/'ARM64_CROSS_SHA256.txt').write_text(hashlib.sha256(data).hexdigest()+'  neon-macos-arm64\n')
+          print('PASS cross-compiled Darwin ARM64 Mach-O and packaged QA .app, byte-perfect')
+          PY
+      - name: Retain ARM64 cross-build with explicit native-test limitation
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-AppleSilicon-ARM64-CROSSBUILT-NO-NATIVE-QA
+          path: |
+            s5platform/dist/NEON_Mac_AppleSilicon_P0_CROSSBUILT_UNVERIFIED.zip
+            s5platform/dist/QA_STATUS_RU.txt
+            s5platform/dist/ARM64_CROSS_SHA256.txt
+          if-no-files-found: error
+          retention-days: 30
