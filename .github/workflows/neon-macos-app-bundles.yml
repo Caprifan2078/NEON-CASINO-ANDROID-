@@ -4,8 +4,8 @@ name: NEON macOS app bundles QA (Intel and Apple Silicon)
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/release-signing-20261104']
-    paths: ['.github/workflows/neon-macos-app-bundles.yml']
+    branches: ['qa/bughunt-wallet-20261104']
+    paths: ['.github/workflows/neon-macos-app-bundles.yml','.ci/patch-p0-lease-cleanup.py']
 permissions:
   contents: read
 jobs:
@@ -31,6 +31,11 @@ jobs:
           mkdir -p s5platform
           unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
           test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/main.go
+      - name: Patch owner-token stale lease cleanup across all embedded web assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
