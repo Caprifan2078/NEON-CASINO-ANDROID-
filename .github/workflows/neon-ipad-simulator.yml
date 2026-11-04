@@ -103,6 +103,24 @@ jobs:
             exit 1
           fi
           echo 'PASS: iPad simulator kept local data after cold restart' 
+      - name: Verify screenshot and package installable Simulator app plus fixed Xcode sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/neon-ipad-first-screen.png"
+          app_dir="$RUNNER_TEMP/neon-build/Build/Products/Debug-iphonesimulator"
+          test -d "$app_dir/NEONROYALE.app"
+          (
+            cd "$app_dir"
+            ditto -c -k --sequesterRsrc --keepParent NEONROYALE.app "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip"
+          )
+          (
+            cd s5platform
+            zip -qr "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip" ios/
+          )
+          unzip -t "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip" >/dev/null
+          unzip -t "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip" >/dev/null
+          shasum -a 256 "$RUNNER_TEMP/NEONROYALE-iOS-Simulator-ONLY.zip" "$RUNNER_TEMP/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip"
       - name: Upload screenshot and build log for manual UI review
         if: always()
         uses: actions/upload-artifact@v4
@@ -110,5 +128,7 @@ jobs:
           name: NEON-iPad-simulator-QA
           path: |
             ${{ runner.temp }}/ios-build.log
-            ${{ runner.temp }}/neon-ios-first-screen.png
+            ${{ runner.temp }}/neon-ipad-first-screen.png
+            ${{ runner.temp }}/NEONROYALE-iOS-Simulator-ONLY.zip
+            ${{ runner.temp }}/NEONROYALE-Xcode-Project-v1.8.9-FIXED.zip
           if-no-files-found: warn
