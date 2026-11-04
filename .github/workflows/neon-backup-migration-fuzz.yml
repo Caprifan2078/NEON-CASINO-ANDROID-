@@ -1,0 +1,57 @@
+name: NEON v2-v5 backup migration and adversarial import QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/save-migration-fuzz-20261105']
+    paths:
+      - '.ci/neon-backup-migration-fuzz.py'
+      - '.github/workflows/neon-backup-migration-fuzz.yml'
+permissions:
+  contents: read
+jobs:
+  legacy-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract immutable v1.8.9 source and apply existing wallet repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Compile actual desktop game and run Go unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ../dist/neon-linux main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real Chromium QA dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Test all supported backup versions, unsafe JSON and recovery on reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-backup-migration-fuzz.py s5platform/dist/neon-linux backup-migration-evidence
+      - name: Save pass/failure proof and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v2-v5-save-migration-adversarial-QA
+          path: backup-migration-evidence/
+          if-no-files-found: warn
+          retention-days: 30
