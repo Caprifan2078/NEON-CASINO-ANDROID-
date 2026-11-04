@@ -1,0 +1,54 @@
+name: NEON real Chromium desktop UI and wallet restart QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/release-signing-20261104']
+    paths:
+      - '.ci/neon-browser-qa.py'
+      - '.github/workflows/neon-browser-qa.yml'
+permissions:
+  contents: read
+jobs:
+  chromium-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract the tested S5 desktop/game source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/main.go
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Compile exact Linux desktop launcher and test Go code
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/neon-linux main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install browser test driver (use preinstalled GitHub Chrome)
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Test actual UI with 44 games + wallet persistence on cold restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-browser-qa.py s5platform/dist/neon-linux browser-evidence
+      - name: Upload real Chromium screenshots and structured QA result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-real-browser-44-games-wallet-QA
+          path: browser-evidence/
+          if-no-files-found: warn
