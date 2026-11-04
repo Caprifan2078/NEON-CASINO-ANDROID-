@@ -1,0 +1,33 @@
+name: NEON exhaustive poker and Teen Patti math verification
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/bughunt-wallet-20261104']
+    paths:
+      - '.ci/neon-exhaustive-cards.cjs'
+      - '.github/workflows/neon-exhaustive-cards.yml'
+permissions:
+  contents: read
+jobs:
+  card-math:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract audited v1.8.9 web sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exhaustively enumerate every standard poker and Teen Patti hand
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .ci/neon-exhaustive-cards.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          node .ci/neon-exhaustive-cards.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
