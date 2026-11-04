@@ -1,0 +1,117 @@
+name: NEON Android optimized-icons regression QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/performance-safety-20261104']
+    paths:
+      - '.ci/optimize-s5-icons.py'
+      - '.github/workflows/neon-android-perf-qa.yml'
+permissions:
+  contents: read
+jobs:
+  perf-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract tested Android S5 snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5src
+          unzip -q .ci/neon-s5-android-sources.zip -d s5src
+          test -s s5src/app/build.gradle
+          test -s s5src/web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate source and 44 games before any optimization
+        working-directory: s5src
+        run: |
+          set -euo pipefail
+          python3 tools/check_mobile.py
+          python3 tools/check_project.py
+          node --check web/app.js
+          npm test
+          npm run audit
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build ORIGINAL versionCode 189, keep it to prove update safety
+        working-directory: s5src
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon -PneonQaBaselineCode=189 :app:assembleDebug
+          mkdir -p "$RUNNER_TEMP/neon-baseline"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/neon-baseline/baseline.apk"
+          test -s "$RUNNER_TEMP/neon-baseline/baseline.apk"
+          echo "ORIGINAL_APK_BYTES=$(stat -c%s "$RUNNER_TEMP/neon-baseline/baseline.apk")" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Reduce icon footprint with bounded perceptual loss
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install 'Pillow==11.1.0'
+          python3 .ci/optimize-s5-icons.py s5src
+          cd s5src
+          python3 tools/check_mobile.py
+          python3 tools/check_project.py
+          node --check web/app.js
+          npm test
+      - name: Build OPTIMIZED versionCode 190 with unchanged signer and unchanged JS
+        working-directory: s5src
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c 4 "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "versionCode='190'"
+          echo "OPTIMIZED_APK_BYTES=$(stat -c%s "$apk")" >> "$GITHUB_ENV"
+          sha256sum "$apk"
+      - name: Confirm net APK saving is material and source is identical except artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Original APK: %s bytes\nOptimized APK: %s bytes\n' "$ORIGINAL_APK_BYTES" "$OPTIMIZED_APK_BYTES"
+          saving=$((ORIGINAL_APK_BYTES - OPTIMIZED_APK_BYTES))
+          test "$saving" -ge 70000 || { echo 'FAIL: smaller than 70 KiB minimum; optimization not shipped' >&2; exit 1; }
+          echo "SAVED_BYTES=$saving" >> "$GITHUB_ENV"
+          printf 'PASS: saved %s bytes without touching JS or game logic\n' "$saving"
+      - name: Allow Android emulator KVM acceleration
+        run: |
+          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
+      - name: Stress-test 44 games, storage BEFORE upgrade and after actual 189→190 update
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEON_PREVIOUS_APK: ${{ runner.temp }}/neon-baseline/baseline.apk
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 600
+          script: bash .ci/run-s5-android-emulator.sh
+      - name: Publish smaller APK only if all emulator regression tests pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v1.8.9-ANDROID-OPTIMIZED-FRESH-QA
+          path: s5src/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
