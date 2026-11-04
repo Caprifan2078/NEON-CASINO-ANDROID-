@@ -12,8 +12,8 @@ def build(web,output):
     js=(web/"app.js").read_text(encoding="utf-8")
     if re.search(r'</script',js,re.I):
         raise SystemExit("Unsupported closing script sequence")
-    css_hash=base64.b64encode(hashlib.sha256(css.encode()).digest()).decode()
-    js_hash=base64.b64encode(hashlib.sha256(js.encode()).digest()).decode()
+    css_hash=base64.b64encode(hashlib.sha256(("\n"+css+"\n").encode()).digest()).decode()
+    js_hash=base64.b64encode(hashlib.sha256(("\n"+js+"\n").encode()).digest()).decode()
     policy=(f"default-src 'none'; script-src 'sha256-{js_hash}'; "
             f"style-src 'sha256-{css_hash}' 'unsafe-inline'; img-src data:; "
             "connect-src 'none'; font-src data:; manifest-src 'none'; "
