@@ -1,0 +1,48 @@
+name: NEON independent RNG and theoretical game RTP QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/save-migration-fuzz-20261105']
+    paths:
+      - '.ci/neon-rng-and-rtp-qa.cjs'
+      - '.github/workflows/neon-rng-and-rtp-qa.yml'
+permissions:
+  contents: read
+jobs:
+  random-and-rtp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact tested NEON 1.8.9 platform source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check true app RNG and exact theoretical expected game returns BEFORE wallet fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check .ci/neon-rng-and-rtp-qa.cjs
+          node .ci/neon-rng-and-rtp-qa.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee result-before.json
+      - name: Recheck original gameplay functions AFTER P0 wallet fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          node .ci/neon-rng-and-rtp-qa.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee result-after.json
+      - name: Save test result evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NEON-RNG-500k-and-theoretical-return-QA
+          path: |
+            result-before.json
+            result-after.json
+          if-no-files-found: warn
+          retention-days: 30
