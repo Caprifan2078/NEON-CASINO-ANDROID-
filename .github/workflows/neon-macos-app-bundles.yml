@@ -1,6 +1,6 @@
 # A distributable .app structure; uses ad-hoc signature for local QA only.
 # Publicly trusted macOS distribution still needs Developer ID + notarization.
-name: NEON macOS app bundles QA (Intel and Apple Silicon)
+name: NEON P0 Apple Silicon ARM native build and .app QA
 on:
   workflow_dispatch:
   push:
@@ -14,10 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15-intel
-            arch: amd64
-            label: intel
-          - runner: macos-15
+          - runner: macos-26
             arch: arm64
             label: apple-silicon
     runs-on: ${{ matrix.runner }}
