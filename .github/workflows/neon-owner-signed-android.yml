@@ -1,0 +1,110 @@
+# SAFE: Trigger signing only by updating .ci/release-request.txt on the QA branch.
+# The workflow does not run on regular commits and never modifies main.
+name: NEON Android owner-key signed release
+on:
+  push:
+    branches:
+      - 'qa/release-signing-20261104'
+    paths:
+      - '.ci/release-request.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require owner signing secrets (never fall back to debug)
+        shell: bash
+        env:
+          NEON_RELEASE_KEYSTORE_B64: ${{ secrets.NEON_RELEASE_KEYSTORE_B64 }}
+          NEON_RELEASE_PASSWORD: ${{ secrets.NEON_RELEASE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NEON_RELEASE_KEYSTORE_B64" || -z "$NEON_RELEASE_PASSWORD" ]]; then
+            echo 'ERROR: Add both NEON_RELEASE_KEYSTORE_B64 and NEON_RELEASE_PASSWORD in GitHub repo Actions secrets. No APK will be published.' >&2
+            exit 1
+          fi
+      - name: Extract the existing tested v1.8.9 source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-src
+          unzip -q .ci/neon-s5-android-sources.zip -d release-src
+          test -s release-src/app/build.gradle
+          test -s release-src/web/app.js
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Recover owner signing keystore in private runner directory
+        shell: bash
+        env:
+          NEON_RELEASE_KEYSTORE_B64: ${{ secrets.NEON_RELEASE_KEYSTORE_B64 }}
+          NEON_RELEASE_PASSWORD: ${{ secrets.NEON_RELEASE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          key_path="$RUNNER_TEMP/neon-owner-release-private.p12"
+          (umask 077; printf '%s' "$NEON_RELEASE_KEYSTORE_B64" | base64 -d > "$key_path")
+          test -s "$key_path"
+          keytool -list -keystore "$key_path" -alias neon_release -storepass:env NEON_RELEASE_PASSWORD >/dev/null
+          echo "NEON_RELEASE_KEYSTORE_PATH=$key_path" >> "$GITHUB_ENV"
+      - name: Compile RELEASE APK with the owner certificate
+        shell: bash
+        working-directory: release-src
+        env:
+          NEON_RELEASE_PASSWORD: ${{ secrets.NEON_RELEASE_PASSWORD }}
+          NEON_SIGNED_RELEASE: '1'
+        run: |
+          set -euo pipefail
+          python3 ../.ci/configure-android-release-signing.py app/build.gradle
+          python3 tools/check_mobile.py
+          python3 tools/check_project.py
+          gradle --no-daemon :app:assembleRelease
+      - name: Verify release signature, exact certificate, package, version and game resources
+        working-directory: release-src
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='app/build/outputs/apk/release/app-release.apk'
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c 4 "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/verified-signature.txt"
+          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/verified-signature.txt"
+          expected='b179824f727d7ac95e0c01591d25083e93a2f89080a59e5b7880f619688100a2'
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/verified-signature.txt" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo 'ERROR: APK signed by an unexpected certificate; release blocked.' >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -q "^package: name='com.neon.play.simulator' versionCode='190' versionName='1.8.9'" "$RUNNER_TEMP/badging.txt"
+          if grep -q '^application-debuggable' "$RUNNER_TEMP/badging.txt"; then
+            echo 'ERROR: release is debuggable; upload blocked.' >&2
+            exit 1
+          fi
+          unzip -t "$apk" >/dev/null
+          unzip -l "$apk" | grep -Fq 'assets/web/app.js'
+          sha256sum "$apk"
+          printf '%s\n' 'Signed using NEON release cert SHA256 B1:79:82:4F:72:7D:7A:C9:5E:0C:01:59:1D:25:08:3E:93:A2:F8:90:80:A5:9E:5B:78:80:F6:19:68:81:00:A2' > app/build/outputs/apk/release/SIGNATURE_STATUS.txt
+      - name: Publish signed APK only after all release gates pass
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v1.8.9-OWNER-SIGNED-RELEASE
+          path: |
+            release-src/app/build/outputs/apk/release/app-release.apk
+            release-src/app/build/outputs/apk/release/SIGNATURE_STATUS.txt
+          if-no-files-found: error
+          retention-days: 30
