@@ -1,0 +1,58 @@
+name: NEON P0 fixed two-tab and JSON backup regression QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/bughunt-wallet-20261104']
+    paths:
+      - '.ci/neon-deep-state-qa.py'
+      - '.github/workflows/neon-p0-two-tab-qa.yml'
+      - '.ci/patch-p0-lease-cleanup.py'
+permissions:
+  contents: read
+jobs:
+  safety-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract immutable audited Go/browser game source
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+      - name: Apply P0 owner-checked lease cleanup before building native binary
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Compile and go test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test -v ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/neon-linux main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Chromium test dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Run corruption, recovery, 2-tab and 3-viewport regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-deep-state-qa.py s5platform/dist/neon-linux deep-evidence
+      - name: Upload screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-fixed-deep-wallet-backup-viewport-QA
+          path: deep-evidence/
+          if-no-files-found: warn
