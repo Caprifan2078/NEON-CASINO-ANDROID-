@@ -91,7 +91,13 @@ def main(exe,out):
                       navigate(game);state.stake=10;render();
                       const before={balance:state.balance,reserved:state.reserved,rounds:state.stats.rounds};
                       const pick = (action,count) => {
-                        for(const b of Array.from(document.querySelectorAll('#gameArea [data-action="'+action+'"]')).slice(0,count))b.click()
+                        for(let i=0;i<count;i++){
+                          // Every click rerenders the board: never reuse detached DOM nodes.
+                          const b=[...document.querySelectorAll('#gameArea [data-action="'+action+'"]')]
+                            .find(x=>!x.disabled && x.getAttribute('aria-pressed')!=='true' && !x.classList.contains('selected'));
+                          if(!b)throw Error('Could not select number '+(i+1)+' for '+action);
+                          b.click();
+                        }
                       };
                       if(game==='keno')pick('keno-pick',5);
                       if(game==='lotto')pick('lotto-pick',6);
