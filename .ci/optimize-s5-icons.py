@@ -27,6 +27,14 @@ def main(root):
             raise RuntimeError(f'Icon optimization not safe: {name}, PSNR {psnr:.2f}, worst difference {maximum}')
         temp.replace(p)
         print(f'PASS {name}: {before} -> {p.stat().st_size} bytes, PSNR={psnr:.2f} dB, max diff {maximum}')
+    # The Android project keeps an exact second copy of web assets under app/src/main/assets.
+    # check_mobile.py refuses mismatched originals or optimized copies.
+    for name in ('icon-192.png','icon-512.png'):
+        for p in (root/'app/src/main/assets').glob('**/'+name):
+            if p.read_bytes()!=originals[name]:
+                raise RuntimeError(f'Bundled icon already differs from original: {p}')
+            shutil.copyfile(web/name,p)
+            print('PASS matching bundled web asset:',p)
     original192=originals['icon-192.png']
     for p in (root/'app/src/main/res').glob('**/neon_icon.png'):
         if p.read_bytes()!=original192:
