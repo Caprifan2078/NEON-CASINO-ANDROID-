@@ -3,10 +3,11 @@ name: NEON P0 wallet fix iPhone and iPad Simulator QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/bughunt-wallet-20261104']
+    branches: ['qa/save-migration-fuzz-20261105']
     paths:
       - '.github/workflows/neon-p0-ios-simulators.yml'
       - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/patch-p0-import-text.py'
 permissions:
   contents: read
 jobs:
@@ -41,6 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-p0-import-text.py s5platform
       - name: Validate iOS version and cross-platform game resources
         shell: bash
         run: python3 s5platform/qa/check_ios_release_metadata.py
@@ -140,7 +142,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-${{ matrix.label }}-simulator-QA
+          name: NEON-P0-SAFE-IMPORT-${{ matrix.label }}-simulator-QA
           path: |
             ${{ runner.temp }}/ios-build.log
             ${{ runner.temp }}/neon-ipad-first-screen.png
