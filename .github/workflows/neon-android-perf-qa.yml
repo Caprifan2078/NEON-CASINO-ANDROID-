@@ -2,7 +2,7 @@ name: NEON Android optimized-icons regression QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/performance-safety-20261104']
+    branches: ['qa/bughunt-wallet-20261104']
     paths:
       - '.ci/optimize-s5-icons.py'
       - '.ci/patch-p0-lease-cleanup.py'
