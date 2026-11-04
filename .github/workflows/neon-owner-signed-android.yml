@@ -99,6 +99,37 @@ jobs:
           unzip -Z1 "$apk" | grep -Fx 'assets/web/app.js'
           sha256sum "$apk"
           printf '%s\n' 'Signed using NEON release cert SHA256 B1:79:82:4F:72:7D:7A:C9:5E:0C:01:59:1D:25:08:3E:93:A2:F8:90:80:A5:9E:5B:78:80:F6:19:68:81:00:A2' > app/build/outputs/apk/release/SIGNATURE_STATUS.txt
+      - name: Delete private keystore from runner as soon as signature is verified
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "$NEON_RELEASE_KEYSTORE_PATH" ]]; then
+            rm -f -- "$NEON_RELEASE_KEYSTORE_PATH"
+          fi
+      - name: Install and launch the RELEASE APK on a real Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 600
+          script: |
+            set -euo pipefail
+            apk='release-src/app/build/outputs/apk/release/app-release.apk'
+            test -s "$apk"
+            adb install -r "$apk"
+            adb shell pm path com.neon.play.simulator | grep -F 'package:'
+            adb shell am start -W -n com.neon.play.simulator/.MainActivity
+            for i in $(seq 1 30); do
+              if adb shell pidof com.neon.play.simulator >/dev/null; then
+                echo 'PASS: Android RELEASE APK installs and launches on API 35'
+                exit 0
+              fi
+              sleep 1
+            done
+            echo 'ERROR: Android release process did not stay alive' >&2
+            exit 1
       - name: Publish signed APK only after all release gates pass
         uses: actions/upload-artifact@v4
         with:
