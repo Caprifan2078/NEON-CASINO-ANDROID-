@@ -1,0 +1,75 @@
+name: NEON P0 multistep wallet reset Windows and Linux native QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/multistep-settlement-20261106']
+    paths:
+      - '.github/workflows/neon-multistep-native-qa.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: windows
+            binary: neon-windows.exe
+          - runner: ubuntu-latest
+            target: linux
+            binary: neon-linux
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore original audited source without touching main
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply and verify BOTH existing P0 wallet fixes in actual embedded assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-s5-reset-ephemeral.py s5platform
+          node .ci/neon-reset-runtime-test.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+          node --check s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Test Go launcher with embedded updated game resources
+        shell: bash
+        working-directory: s5platform/BUILD_READY_WINDOWS_LAUNCHER
+        run: |
+          set -euo pipefail
+          go test ./...
+          go vet ./...
+      - name: Build executable for actual host
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform/dist
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          CGO_ENABLED=0 GOOS=${{ matrix.target }} GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o '../dist/${{ matrix.binary }}' main.go
+      - name: Smoke launch, test localhost host protection and bundled assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 s5platform/qa/verify_desktop_runtime.py s5platform/dist/${{ matrix.binary }}
+      - name: Upload host-tested QA-only executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-MULTISTEP-${{ matrix.target }}-x64-QA
+          path: s5platform/dist/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 30
