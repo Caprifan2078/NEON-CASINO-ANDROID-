@@ -48,11 +48,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 .ci/neon-round-finish-qa.py s5platform/dist/neon-linux round-evidence
+      - name: Verify save compatibility v2 to v5 on the same build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-backup-migration-fuzz.py s5platform/dist/neon-linux backup-evidence
+      - name: Repeat long-run regression on the same build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-long-stress-qa.py s5platform/dist/neon-linux stress-evidence
       - name: Save exact result and screenshot whether passing or failing
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: NEON-round-finish-RED-GREEN-evidence
-          path: round-evidence/
+          path: |
+            round-evidence/
+            backup-evidence/
+            stress-evidence/
           if-no-files-found: warn
           retention-days: 30
