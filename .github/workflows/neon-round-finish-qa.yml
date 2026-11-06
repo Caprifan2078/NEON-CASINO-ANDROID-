@@ -1,0 +1,58 @@
+name: NEON round completion and wallet mode isolation RED GREEN
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/round-finish-safety-20261106']
+    paths:
+      - '.ci/neon-round-finish-qa.py'
+      - '.ci/patch-p0-reset-all-rounds.py'
+      - '.github/workflows/neon-round-finish-qa.yml'
+permissions:
+  contents: read
+jobs:
+  finishing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact latest tested source and preserve old functionality
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+          python3 .ci/patch-p0-import-text.py s5platform
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Unit tests and build the actual Go launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/neon-linux main.go
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real browser test dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Test cancellation and finished rounds in isolated real Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-round-finish-qa.py s5platform/dist/neon-linux round-evidence
+      - name: Save exact result and screenshot whether passing or failing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-round-finish-RED-GREEN-evidence
+          path: round-evidence/
+          if-no-files-found: warn
+          retention-days: 30
