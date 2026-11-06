@@ -1,0 +1,97 @@
+name: NEON P0 extra games wallet mode reset RED GREEN and settlement QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/multistep-settlement-20261106']
+    paths:
+      - '.ci/patch-s5-reset-ephemeral.py'
+      - '.ci/neon-reset-runtime-test.cjs'
+      - '.ci/neon-multistep-browser-qa.py'
+      - '.github/workflows/neon-multistep-settlement-qa.yml'
+permissions:
+  contents: read
+jobs:
+  multistep-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract verified existing v1.8.9 desktop/iOS source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5platform
+          unzip -q .ci/neon-s5-desktop-ios-sources.zip -d s5platform
+          test -s s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+          python3 .ci/patch-p0-lease-cleanup.py s5platform
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: RED - reproduce stale extra game after mode-switch on unpatched source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+          if node .ci/neon-reset-runtime-test.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js > red.txt 2>&1; then
+            echo 'ERROR: expected regression test to fail before fix' >&2
+            exit 1
+          fi
+          grep -Fq 'STALE ROUND:' red.txt || { cat red.txt; echo 'RED failed for unrelated reason' >&2; exit 1; }
+          echo 'EXPECTED RED: stale transient game states reproduced before patch'
+      - name: Apply minimal runtime-only fix in extracted copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-s5-reset-ephemeral.py s5platform
+      - name: GREEN - regression test on the corrected real game code
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+          node .ci/neon-reset-runtime-test.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee green.txt
+          test -s green.txt
+          node .ci/neon-odds-invariants.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js | tee math_after_fix.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test and compile actual Go launcher with corrected embedded assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          go test ./...
+          go vet ./...
+          mkdir -p ../dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../dist/neon-linux main.go
+      - name: Install real Chromium QA runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright psutil
+          which google-chrome || which chromium
+      - name: Test mode switch and actual finishing paths for multistep games
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-multistep-browser-qa.py s5platform/dist/neon-linux multistep-evidence
+      - name: Rerun versioned save import and failed-write rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/neon-backup-migration-matrix.py s5platform/dist/neon-linux migration-evidence
+      - name: Publish evidence of RED GREEN and browser/migration checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-P0-26-extra-games-multistep-wallet-QA
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            red.txt
+            green.txt
+            math_after_fix.json
+            multistep-evidence/
+            migration-evidence/
