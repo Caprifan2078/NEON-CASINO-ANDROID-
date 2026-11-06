@@ -1,0 +1,116 @@
+name: NEON P0 multistep wallet fix optimized Android APK and upgrade QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/multistep-settlement-20261106']
+    paths:
+      - '.ci/patch-s5-reset-ephemeral.py'
+      - '.github/workflows/neon-multistep-android-qa.yml'
+permissions:
+  contents: read
+jobs:
+  android-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract immutable existing Android sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5src
+          unzip -q .ci/neon-s5-android-sources.zip -d s5src
+          test -s s5src/app/build.gradle
+          test -s s5src/web/app.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate unchanged baseline game logic before any fix
+        working-directory: s5src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_mobile.py
+          python3 tools/check_project.py
+          node --check web/app.js
+          npm test
+          npm run audit
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build exact old test APK versionCode 189 to verify upgrade
+        working-directory: s5src
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon -PneonQaBaselineCode=189 :app:assembleDebug
+          mkdir -p "$RUNNER_TEMP/neon-baseline"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/neon-baseline/baseline.apk"
+          test -s "$RUNNER_TEMP/neon-baseline/baseline.apk"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply verified P0 owner-token and new round-reset fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5src
+          python3 .ci/patch-s5-reset-ephemeral.py s5src
+          node .ci/neon-reset-runtime-test.cjs s5src/web/app.js
+      - name: Optimize icons without changing their dimensions or game rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install 'Pillow==11.1.0'
+          python3 .ci/optimize-s5-icons.py s5src
+          cd s5src
+          python3 tools/check_mobile.py
+          python3 tools/check_project.py
+          node --check web/app.js
+          npm test
+      - name: Build v1.8.9 optimized versionCode 190 QA APK
+        shell: bash
+        working-directory: s5src
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+          apk='app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c 4 "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "versionCode='190'"
+          unzip -p "$apk" assets/web/app.js | grep -Fq 'for(const key of Object.keys(rt))delete rt[key]'
+          sha256sum "$apk"
+      - name: Enable hardware acceleration
+        shell: bash
+        run: |
+          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
+      - name: Test Android 189 to 190 upgrade, wallet and 44 game views
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEON_PREVIOUS_APK: ${{ runner.temp }}/neon-baseline/baseline.apk
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 600
+          script: bash .ci/run-s5-android-emulator.sh
+      - name: Upload QA-only APK after passing source, signing and emulator checks
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v1.8.9-P0-MULTISTEP-ANDROID-OPTIMIZED-QA
+          path: s5src/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
