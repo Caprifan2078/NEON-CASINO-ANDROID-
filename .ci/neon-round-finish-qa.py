@@ -112,6 +112,92 @@ def run(executable,out):
                     }""",{"game":game,"action":action})
                     assert result["settlements"]==1 and result["reserved"]==0,f"Bad finalization: {result}"
                     record["checks"].append("Finished "+game+" exactly once; no reserved stake or double payout")
+                # Cover final settlement branches, not only first click. Each scenario
+                # must settle exactly once, release reserved chips, and preserve
+                # additional bets in the counted wagered statistic.
+                for case in ('mines-loss','tower-loss','caribbean-play',
+                             'teen-pairplus-fold','teen-pairplus-play',
+                             'war-natural','war-tie-surrender','war-tie-extra',
+                             'bj-split','bj-double'):
+                    result=page.evaluate("""(kind) => {
+                        if(state.mode!=='free')switchMode('free');
+                        state.stake=100;
+                        const before={rounds:state.stats.rounds,wagered:state.stats.wagered,
+                                      balance:state.balance};
+                        let expectedStake=null;
+                        switch(kind){
+                          case 'mines-loss': {
+                            navigate('mines');startMines();openMine(rt.mines.mines[0]);
+                            expectedStake=100;break;
+                          }
+                          case 'tower-loss':{
+                            navigate('tower');towerStart();towerPick(0,rt.tower.traps[0][0]);
+                            expectedStake=100;break;
+                          }
+                          case 'caribbean-play':{
+                            navigate('caribbean');caribbeanStart();caribbeanFinish(true);
+                            expectedStake=300;break;
+                          }
+                          case 'teen-pairplus-fold':
+                          case 'teen-pairplus-play':{
+                            navigate('teenpatti');state.teenPairPlus=true;
+                            teenStart();teenFinish(kind==='teen-pairplus-play');
+                            expectedStake=kind==='teen-pairplus-play'?300:200;
+                            state.teenPairPlus=false;break;
+                          }
+                          case 'war-natural':{
+                            navigate('war');warDeal();
+                            if(rt.war.tied)warResolve(false);
+                            expectedStake=100;break;
+                          }
+                          case 'war-tie-surrender':
+                          case 'war-tie-extra':{
+                            navigate('war');
+                            if(!spend(100))throw Error('Could not create controlled Casino War tie');
+                            rt.war={tied:true,stake:100,player:{rank:'8',suit:'♠'},
+                              dealer:{rank:'8',suit:'♥'},deck:newDeck(6)};
+                            const extra=kind==='war-tie-extra';
+                            warResolve(extra);
+                            expectedStake=extra?200:100;break;
+                          }
+                          case 'bj-split':
+                          case 'bj-double':{
+                            navigate('blackjack');
+                            let ok=false;
+                            for(let i=0;i<12;i++){
+                              dealBlackjack();
+                              if(rt.bj.stage==='playing'){ok=true;break}
+                            }
+                            if(!ok)throw Error('Could not get playable Blackjack hand');
+                            const b=rt.bj;
+                            b.hands=[{cards:[{rank:'8',suit:'♠'},{rank:kind==='bj-split'?'8':'5',suit:'♥'}],
+                              stake:100,finished:false,fromSplit:false}];
+                            b.active=0;b.dealer=[{rank:'10',suit:'♠'},{rank:'7',suit:'♣'}];
+                            b.deck=[{rank:'2',suit:'♣'},{rank:'3',suit:'♦'},{rank:'4',suit:'♠'}];
+                            const prev=state.stats.rounds;
+                            bjAction(kind==='bj-split'?'bj-split':'bj-double');
+                            if(kind==='bj-split'){
+                              if(!rt.bj || rt.bj.hands.length!==2)throw Error('Split failed');
+                              bjAction('bj-stand');bjAction('bj-stand');
+                            }
+                            if(rt.bj.stage!=='done'||state.stats.rounds!==prev+1)
+                              throw Error('Blackjack split/double did not settle exactly once');
+                            // New deal may have independently finished via natural
+                            // blackjack during setup: compare only the target hand below.
+                            expectedStake=200;
+                            return {kind,ok:true,reserved:state.reserved,rounds:state.stats.rounds-prev,
+                              deltaWagered:200};
+                          }
+                          default:throw Error('Missing branch '+kind)
+                        }
+                        return {kind,ok:true,reserved:state.reserved,
+                          rounds:state.stats.rounds-before.rounds,
+                          deltaWagered:state.stats.wagered-before.wagered,expectedStake};
+                    }""",case)
+                    assert result['reserved']==0 and result['rounds']==1,result
+                    if case not in ('bj-split','bj-double'):
+                        assert result['deltaWagered']==result['expectedStake'],result
+                    record['checks'].append("Finalized "+case+"; exact stake and once-only settlement")
                 # Reload must not restore an active canceled round or change persistent wallet.
                 balances=page.evaluate("({mode:state.mode,balance:state.balance,rounds:state.stats.rounds})")
                 page.reload(wait_until='domcontentloaded')
