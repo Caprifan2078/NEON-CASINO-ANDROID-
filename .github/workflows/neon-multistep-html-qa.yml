@@ -1,0 +1,96 @@
+name: NEON P0 multistep wallet reset standalone HTML QA
+on:
+  workflow_dispatch:
+  push:
+    branches: ['qa/multistep-settlement-20261106']
+    paths:
+      - '.ci/build-standalone-offline.py'
+      - '.github/workflows/neon-multistep-html-qa.yml'
+      - '.ci/patch-p0-lease-cleanup.py'
+permissions:
+  contents: read
+jobs:
+  offline-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract existing validated game assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p s5src
+          unzip -q .ci/neon-s5-android-sources.zip -d s5src
+          test -s s5src/web/index.html
+          test -s s5src/web/app.js
+      - name: Apply verified stale-lease fix before generating standalone HTML
+        run: |
+          set -euo pipefail
+          python3 .ci/patch-p0-lease-cleanup.py s5src
+          python3 .ci/patch-s5-reset-ephemeral.py s5src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build standalone HTML, no external dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .ci/build-standalone-offline.py s5src/web site/NEON_CASINO_ROYALE_1.8.9_STANDALONE_OFFLINE.html
+          test -s site/NEON_CASINO_ROYALE_1.8.9_STANDALONE_OFFLINE.html
+      - name: Install browser test driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright
+          which google-chrome || which chromium
+      - name: Run all 44 games from a real offline file URL and reload persisted wallet
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil,tempfile
+          from playwright.sync_api import sync_playwright
+          url=Path("site/NEON_CASINO_ROYALE_1.8.9_STANDALONE_OFFLINE.html").resolve().as_uri()
+          chrome=shutil.which("google-chrome") or shutil.which("chromium")
+          assert chrome
+          with sync_playwright() as pw:
+              context=pw.chromium.launch_persistent_context(user_data_dir=tempfile.mkdtemp(prefix="neon-offline-qa-"),executable_path=chrome,headless=True,args=["--no-sandbox"],viewport={"width":390,"height":844})
+              try:
+                  page=context.pages[0] if context.pages else context.new_page()
+                  page.goto(url,wait_until="domcontentloaded",timeout=30000)
+                  page.locator('#gameNav [data-action=nav]').first.wait_for(state='attached',timeout=20000)
+                  assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
+                  page.on('dialog',lambda d:d.accept())
+                  # Prove the new 26-game reset actually works in the file:// build too.
+                  before=page.evaluate("""() => {
+                    state.stake=10;navigate('letitride');letItRideStart();
+                    return {active:rt.letitride?.active,reserved:state.reserved}
+                  }""")
+                  assert before=={'active':True,'reserved':30},before
+                  page.evaluate("switchMode('daily')")
+                  assert page.evaluate("rt.letitride == null && state.reserved===0 && state.mode==='daily' && profileSnapshots.free.balance===50000"), 'Stale Let It Ride after mode change'
+                  page.evaluate("switchMode('free')")
+                  assert page.evaluate("state.mode==='free' && state.balance===50000 && state.reserved===0")
+                  print('PASS: file:// mode switch fully resets additional game state')
+                  initial=page.evaluate("String(state.balance)")
+                  results=page.evaluate("""() => [...document.querySelectorAll('#gameNav [data-action=nav]')].map((n)=>{ const id=n.dataset.game; n.click(); return state.game===id && Boolean(document.querySelector('#gameArea')?.children.length);})""")
+                  assert len(results)==44 and all(results), 'Not all 44 game panels rendered'
+                  assert page.evaluate("String(state.balance)")==initial,'Navigation unexpectedly changed wallet'
+                  page.evaluate("() => {save();localStorage.setItem('__neon_standalone_check','preserved')}")
+                  page.reload(wait_until="domcontentloaded")
+                  page.locator('#gameNav [data-action=nav]').first.wait_for(state='attached',timeout=20000)
+                  assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
+                  assert page.evaluate("localStorage.getItem('__neon_standalone_check')")=="preserved", 'localStorage not persisted on reload'
+                  assert page.evaluate("String(state.balance)")==initial,'Wallet changed on reload'
+                  page.screenshot(path="site/NEON_OFFLINE_MOBILE_QA.png",full_page=True)
+                  print("PASS: actual offline HTML loaded all 44 panels and preserved wallet on reload")
+              finally:context.close()
+          PY
+      - name: Upload tested HTML and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEON-v1.8.9-P0-MULTISTEP-standalone-HTML-tested
+          path: site/
+          if-no-files-found: warn
