@@ -53,7 +53,16 @@ def run(executable,out):
                         state.chip=10;
                         navigate(game);
                         // These are the SAME public game actions called by the UI.
-                        const f=Function(start); f();
+                        switch(game){
+                          case 'scratch': scratchStart(); break;
+                          case 'tower': towerStart(); break;
+                          case 'threecard': threeDeal(); break;
+                          case 'caribbean': caribbeanStart(); break;
+                          case 'teenpatti': teenStart(); break;
+                          case 'treasure': treasureStart(); break;
+                          case 'roulette-us': case 'roulette-fr': vrBet('red'); break;
+                          default: throw Error('Missing game '+game);
+                        }
                         if(state.reserved<=0)throw Error('Round did not reserve chips: '+game);
                         switchMode('daily');
                         return {
@@ -83,7 +92,22 @@ def run(executable,out):
                         state.stake=100;
                         navigate(game);
                         const before=state.stats.rounds;
-                        Function(action)();
+                        switch(game){
+                          case 'scratch': scratchStart(); for(let i=0;i<9;i++)scratchOpen(i);scratchOpen(8); break;
+                          case 'tower': towerStart();for(let row=0;row<5;row++){
+                            const c=[0,1,2].find(x=>!rt.tower.traps[row].includes(x));towerPick(row,c);
+                          }towerPick(4,0);break;
+                          case 'mines': startMines();{
+                            const r=rt.mines;
+                            openMine([...Array(r.size).keys()].find(x=>!r.mines.includes(x)));
+                            cashMines();cashMines();
+                          }break;
+                          case 'treasure':treasureStart();treasureOpen(0);treasureOpen(0);break;
+                          case 'threecard':threeDeal();threeFinish(true);threeFinish(true);break;
+                          case 'caribbean':caribbeanStart();caribbeanFinish(false);caribbeanFinish(true);break;
+                          case 'teenpatti':teenStart();teenFinish(false);teenFinish(true);break;
+                          default:throw Error('Missing finish scenario '+game);
+                        }
                         return {game,settlements:state.stats.rounds-before,reserved:state.reserved,balance:state.balance};
                     }""",{"game":game,"action":action})
                     assert result["settlements"]==1 and result["reserved"]==0,f"Bad finalization: {result}"
