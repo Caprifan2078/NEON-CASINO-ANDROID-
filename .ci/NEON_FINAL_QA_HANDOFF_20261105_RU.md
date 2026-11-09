@@ -29,3 +29,15 @@
 - Added `.ci/neon-backup-migration-matrix.py` and `.github/workflows/neon-backup-migration-matrix.yml`.
 - Test #42057592654 PASS; no game logic or save schema changed, main untouched.
 - Current status: **QA improved and verified**; public production release **not yet verified**.
+
+
+## QA checkpoint 2026-11-09 — roulette presets safely ported
+
+- **Active feature branch:** `qa/p0-roulette-presets-recovery-20261109`; base `5d7f9dc22b394c937c2ed01fbe8ff8cf5ef13dc6`. Never merge automatically into `main`.
+- **Exact source SHA:** P0 06-Nov JS `be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb`; after restoring three v1.8.10 roulette presets `cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba`.
+- **Actual change:** reviewed minimal `.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch`; preserves multi-step reset and owner-token cleanup, adds only preset UI/local storage/JSON v5 optional preference and atomic wallet reservation on Load. No new save format or game rules.
+- **Local QA:** 22 compatible Node regression/audit suites PASS, 44 game modes, 352 stress cases, 174 probability cases; Chromium UI PASS at 240/390/768/1440 px. Historic tests that assert version 1.8.10 were not misrepresented as P0 1.8.9 tests.
+- **GitHub offline HTML CI:** https://github.com/Caprifan2078/NEON-CASINO-ANDROID-/actions/runs/42538869158 SUCCESS, tested through actual `file://` with 44 games, wallet and preset persist/reload. Generated HTML asset JS matches the above SHA. First CI attempt #42538748223 failed solely because the GitHub-uploaded .patch lost its final newline; fixed with separate commit and rerun successfully.
+- **Android CI:** separate QA Android build + 189→190 emulator workflow added on this branch; consult the run outcome before claiming new APK compatibility. Never install atop an owner-signed app without checking certificate and package ID.
+- **Next required checks:** build and verify this exact patched game asset on Android, Windows/Linux, macOS and iOS simulators; verify exports, migrations and physical-device upgrade before public release. No owner secrets in repository.
+- **Persistent local QA package:** ChatGPT Library `/Neon Casino QA/2026-11-09 P0 roulette presets/NEON_CASINO_P0_PRESETS_QA_RECOVERY_2026-11-09.zip` contains original and patched sources, exact diff, tests, QA logs, resume docs and reproducible `RUN_QA.sh`.
