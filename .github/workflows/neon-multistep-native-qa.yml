@@ -61,6 +61,12 @@ jobs:
           PY
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb"
           test "$(sha256sum "$d/web/app.css" | cut -d' ' -f1)" = "d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67"
+          # Git for Windows checks out tracked .patch as CRLF under autocrlf.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch')
+          p.write_bytes(p.read_bytes().replace(b'\r\n',b'\n'))
+          PY
           git apply --directory="$d" .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
           node --check "$d/web/app.js"
