@@ -45,3 +45,14 @@
 - **Saved artifacts:** The full CRC-verified CI QA bundle, exact per-artifact hashes, source recovery snapshot, `PROJECT_STATE.md`, `TASKS.md`, `CHANGELOG_DEV.md`, and `QA_REPORT.md` are persisted in ChatGPT Library at `/Neon Casino QA/2026-11-09 P0 roulette presets/`.
 - **Next required checks:** build and verify this exact patched game asset on Android, Windows/Linux, macOS and iOS simulators; verify exports, migrations and physical-device upgrade before public release. No owner secrets in repository.
 - **Persistent local QA package:** ChatGPT Library `/Neon Casino QA/2026-11-09 P0 roulette presets/NEON_CASINO_P0_PRESETS_QA_RECOVERY_2026-11-09.zip` contains original and patched sources, exact diff, tests, QA logs, resume docs and reproducible `RUN_QA.sh`.
+
+
+## P0 atomic import, 2026-11-09 — exact tested checkpoint
+
+- **Branch:** `qa/p0-atomic-import-20261109`, branched from `qa/p0-roulette-presets-recovery-20261109` SHA `799bbd81423dc1917c25dbb0e5b753400495714b`. `main` never changed.
+- **Reproduced RED:** when `localStorage.setItem(ROULETTE_PRESETS_KEY)` rejected imported settings, old `loadBackup` returned success while wallet balance was committed (42000) and the preset was not persisted. A cold restart lost that preset.
+- **GREEN:** `.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch` applied **after** prior presets + wallet patches, checks all preference writes before wallet commit, compensates on failures, and returns a clear error rather than success. Valid v5, cold reload and undo preserved. No save version bump or real-money features.
+- **Deterministic JS:** before SHA-256 `cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba`, after SHA-256 `1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2`. New regression `.ci/neon-import-atomic-regression.cjs` covers 4 preference errors + failed wallet + import/cold reload/undo.
+- **CI verified SUCCESS**: HTML/offline `42546673725`; Android + emulator upgrade `42546793939`; Windows/Linux `42546847782`; macOS Intel/Apple Silicon `42546898056`; iPhone+iPad Simulator `42546951908`; extra legacy v2-v5 migration/undo/quota `42547183705`. All 8 platform targets successful, plus migration matrix.
+- **Artifacts**: exact QA APK, offline HTML, Windows/Linux, two macOS .app archives, iPhone/iPad Simulator packages/Xcode sources, SHA-256 manifest, regression tests and documentation held in the separate ChatGPT Library folder `/Neon Casino QA/2026-11-09 P0 atomic import/`.
+- **Unresolved risks:** localStorage writes across distinct keys are not fully crash-atomic; process termination between writes requires separate resilience work. QA APK has test signer; owner-signed update of any installed user APK not established. Unsigned/not notarized Mac & iOS physical builds not production releases. Physical-device checks still pending. Do not merge into main or delete old installs.
