@@ -1,11 +1,11 @@
 # A distributable .app structure; uses ad-hoc signature for local QA only.
 # Publicly trusted macOS distribution still needs Developer ID + notarization.
-name: NEON P0 multistep Mac Intel and Apple Silicon native .app QA
+name: NEON P0 roulette presets Mac Intel and Apple Silicon native .app QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/multistep-settlement-20261106']
-    paths: ['.github/workflows/neon-multistep-macos-app-bundles.yml']
+    branches: ['qa/p0-roulette-presets-recovery-20261109']
+    paths: ['.github/workflows/neon-multistep-macos-app-bundles.yml', '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch']
 permissions:
   contents: read
 jobs:
@@ -37,6 +37,16 @@ jobs:
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5platform
           python3 .ci/patch-s5-reset-ephemeral.py s5platform
+      - name: Apply exact roulette presets to native macOS embedded JS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          test "$(shasum -a 256 "$d/web/app.js" | awk '{print $1}')" = "be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb"
+          test "$(shasum -a 256 "$d/web/app.css" | awk '{print $1}')" = "d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67"
+          git apply --directory="$d" .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          test "$(shasum -a 256 "$d/web/app.js" | awk '{print $1}')" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          grep -Fq 'function roulettePresetLoad(slot)' "$d/web/app.js"
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -106,7 +116,7 @@ jobs:
       - name: Upload macOS app bundle (QA, not notarized)
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-MULTISTEP-macOS-${{ matrix.label }}-APP-QA
+          name: NEON-P0-PRESETS-macOS-${{ matrix.label }}-APP-QA
           path: |
             s5platform/dist/NEON_CASINO_v1.8.9_macos_${{ matrix.label }}_QA.zip
             s5platform/dist/SIGNING_STATUS.txt
