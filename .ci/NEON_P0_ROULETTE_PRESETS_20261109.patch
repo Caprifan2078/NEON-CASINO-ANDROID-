@@ -1,0 +1,141 @@
+--- a/web/app.js
++++ b/web/app.js
+@@ -122,6 +122,62 @@
+ // A migrated profile is written at startup only after state and save() exist.
+ if(persisted.reserved>0||persisted.profiles?.free?.reserved>0||persisted.profiles?.daily?.reserved>0)save();
+ let lastRouletteBets=[];
++// Three local roulette layout presets. A preset records placement only; it never
++// carries paid winnings or reserves a stake until explicitly loaded by the player.
++const ROULETTE_PRESETS_KEY='neon-casino-roulette-presets-v1';
++const ROULETTE_PRESET_SLOTS=3;
++function validPresetBet(b){
++ if(!b||typeof b!=='object'||!Number.isSafeInteger(b.amount)||b.amount<1||b.amount>MAX_ROULETTE_BET)return false;
++ const v=String(b.value);
++ if(b.type==='number')return /^(0|[1-9]|[12][0-9]|3[0-6])$/.test(v);
++ if(b.type==='color')return v==='red'||v==='black';
++ if(b.type==='low'||b.type==='high'||b.type==='odd'||b.type==='even')return v===b.type;
++ if(b.type==='dozen'||b.type==='column')return ['1','2','3'].includes(v);
++ if(b.type==='combo'){
++  const nums=v.split(',').map(Number);
++  if(![2,3,4,6].includes(nums.length)||new Set(nums).size!==nums.length||nums.some(n=>!Number.isInteger(n)||n<1||n>36))return false;
++  const ordered=nums.slice().sort((a,b)=>a-b).join(',');
++  return ['split-right','split-up','street','corner','sixline'].some(kind=>
++   Array.from({length:36},(_,i)=>rouletteGroup(kind,i+1)).some(group=>group&&group.slice().sort((a,b)=>a-b).join(',')===ordered));
++ }
++ return false;
++}
++function validRoulettePresets(input){
++ return Array.isArray(input)&&input.length===ROULETTE_PRESET_SLOTS&&input.every(layout=>
++  layout===null||(Array.isArray(layout)&&layout.length>=1&&layout.length<=300&&
++  layout.every(validPresetBet)&&Number.isSafeInteger(layout.reduce((sum,b)=>sum+b.amount,0))&&
++  layout.reduce((sum,b)=>sum+b.amount,0)<=MAX_ROULETTE_BET*300));
++}
++function cloneRoulettePresets(value){return value.map(layout=>layout?layout.map(b=>({type:b.type,value:String(b.value),amount:b.amount})):null)}
++let roulettePresets=[null,null,null];
++try{const stored=JSON.parse(localStorage.getItem(ROULETTE_PRESETS_KEY)||'null');if(validRoulettePresets(stored))roulettePresets=cloneRoulettePresets(stored)}catch(e){}
++function roulettePresetSave(slot){
++ if(!canModify()){leaseBlock();return false}
++ if(!Number.isInteger(slot)||slot<0||slot>=ROULETTE_PRESET_SLOTS||rt.rouletteSpinning||!rt.bets.length)return false;
++ if(!validRoulettePresets([rt.bets,null,null])){toast('Раскладка ставок некорректна',true);return false}
++ if(roulettePresets[slot]&&!confirm('Перезаписать сохранённую раскладку №'+(slot+1)+'?'))return false;
++ const next=cloneRoulettePresets(roulettePresets);next[slot]=rt.bets.map(b=>({type:b.type,value:String(b.value),amount:b.amount}));
++ try{localStorage.setItem(ROULETTE_PRESETS_KEY,JSON.stringify(next))}catch(e){toast('Недостаточно места для сохранения раскладки',true);return false}
++ roulettePresets=next;toast('Раскладка №'+(slot+1)+' сохранена');render();return true;
++}
++function roulettePresetLoad(slot){
++ if(!canModify()){leaseBlock();return false}
++ if(!Number.isInteger(slot)||slot<0||slot>=ROULETTE_PRESET_SLOTS||rt.rouletteSpinning||rt.bets.length)return false;
++ const layout=roulettePresets[slot];if(!layout||!validRoulettePresets([layout,null,null]))return false;
++ const total=layout.reduce((sum,b)=>sum+b.amount,0);
++ // Atomic: one durable wallet reservation, not a sequence of partial debits.
++ if(!spend(total,MAX_ROULETTE_BET*300))return false;
++ rt.bets=layout.map(b=>({...b}));rt.rouletteNotice='';render();return true;
++}
++function roulettePresetDelete(slot){
++ if(!canModify()){leaseBlock();return false}
++ if(!Number.isInteger(slot)||slot<0||slot>=ROULETTE_PRESET_SLOTS||!roulettePresets[slot]||rt.rouletteSpinning)return false;
++ const next=cloneRoulettePresets(roulettePresets);next[slot]=null;
++ try{localStorage.setItem(ROULETTE_PRESETS_KEY,JSON.stringify(next))}catch(e){toast('Не удалось удалить раскладку',true);return false}
++ roulettePresets=next;render();return true;
++}
++function roulettePresetsHTML(){return `<section class="roulette-presets" aria-label="Избранные раскладки ставок"><div class="roulette-presets-title"><strong>СОХРАНЁННЫЕ РАСКЛАДКИ</strong><small>До 3 вариантов · обе версии стола</small></div><div class="roulette-presets-list">${roulettePresets.map((layout,i)=>`<div class="roulette-preset"><span class="roulette-preset-number">№ ${i+1}<small>${layout?`${layout.length} ставок · ${money(layout.reduce((s,b)=>s+b.amount,0))}`:'Пусто'}</small></span><button type="button" class="btn small ${layout?'gold':'ghost'}" data-action="roulette-preset-${layout?'load':'save'}" data-slot="${i}" ${rt.rouletteSpinning||(layout?rt.bets.length>0:rt.bets.length===0)?'disabled':''}>${layout?'Поставить':'Запомнить'}</button>${layout?`<button type="button" class="btn small ghost" data-action="roulette-preset-save" data-slot="${i}" ${rt.rouletteSpinning||!rt.bets.length?'disabled':''} title="Обновить раскладку">↻</button><button type="button" class="btn small ghost" data-action="roulette-preset-delete" data-slot="${i}" ${rt.rouletteSpinning?'disabled':''} aria-label="Удалить раскладку №${i+1}">×</button>`:''}</div>`).join('')}</div><p class="tiny">Кнопка «Поставить» резервирует виртуальные фишки только при нажатии. Сначала очисти текущий стол. Раскладки входят в JSON-экспорт.</p></section>`}
++
+ const RNUM=[0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+ const REDS=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+ const WIN_SECTORS=[1,0,0.5,0,1,0,2,0,1,0,3,0,1,0,0.5,0,1,0,10,0,1,0,1,0];
+@@ -389,7 +445,7 @@
+  <div class="ticket-winning">${won.length?`<strong>Выигравшие ставки: ${won.length}</strong>${won.slice(0,6).map(b=>`<div><span>${label(b)} ${esc(short(b))} · ${money(b.amount)}</span><b>+${money(b.payout)}</b></div>`).join('')}${won.length>6?`<small>И ещё ${won.length-6} выигравших ставок · полный журнал в профиле</small>`:''}`:'Ни одна ставка не сыграла. Это не влияет на вероятность следующего числа.'}</div>
+  </section>`;
+ }
+-function rouletteHTML(){const last=rt.rouletteResult??state.rouletteHistory[0]?.n??'—';const latest=state.rouletteHistory.slice(0,10);const grouped=new Map();rt.bets.forEach(b=>{const k=b.type+':'+b.value;grouped.set(k,(grouped.get(k)||0)+b.amount)});const badge=(type,value)=>grouped.has(type+':'+value)?`<span class="bet-mark">${fmt(grouped.get(type+':'+value))}</span>`:'';let numCells='';for(let row=2;row>=0;row--)for(let col=0;col<12;col++){const n=col*3+row+1;numCells+=`<button class="bet-cell ${outcomeColor(n)} ${!rt.rouletteSpinning&&last===n?'last-winning-number':''}" data-action="${state.rouletteTableMode==='pro'?'roulette-anchor':'roulette-bet'}" data-type="number" data-value="${n}" ${rt.rouletteSpinning?'disabled':''}>${n}${badge('number',n)}</button>`}const out=(text,type,value,extra='')=>`<button class="outside-bet ${extra}" data-action="roulette-bet" data-type="${type}" data-value="${value}" ${rt.rouletteSpinning?'disabled':''}>${text}${badge(type,value)}</button>`;return `<div class="hero-table"><div class="roulette-top"><div class="roulette-wheel-wrap"><div class="wheel-needle"></div><div class="ball-orbit ${rt.rouletteSpinning?'is-spinning':''}" aria-hidden="true"><i class="roulette-ball"></i></div><div class="roulette-wheel" id="rouletteWheel" style="transform:rotate(${rt.rouletteRotation}deg)">${sectorSVG(RNUM,RNUM.map(n=>n===0?'#11926f':REDS.has(n)?'#c13c4c':'#242938'))}</div></div><div class="roulette-display"><span class="panel-label">${rt.rouletteSpinning?'КОЛЕСО КРУТИТСЯ':'ПОСЛЕДНЕЕ ЧИСЛО'}</span><div class="center-result ${Number.isInteger(last)?outcomeColor(last):''} ${rt.rouletteSpinning?'is-spinning':'result-highlight'}">${last}</div><h2>${rt.rouletteSpinning?'Ожидание результата…':'Ставь на удачу'}</h2><div class="tiny">Европейская рулетка · RTP ≈ 97,3%</div><button class="btn primary" data-action="roulette-spin" ${rt.rouletteSpinning||!rt.bets.length?'disabled':''}>◉ &nbsp; КРУТИТЬ КОЛЕСО</button></div></div>${tapeHTML()}<div class="history-strip"><span class="panel-label">ИСТОРИЯ</span><div class="history-numbers">${latest.map(x=>`<span class="ball-mini ${outcomeColor(x.n)}">${x.n}</span>`).join('')||'<span class="tiny">Нет вращений</span>'}</div><button class="link-btn" data-action="history">Вся история ›</button></div></div><div class="panel betting-panel"><div class="panel-header"><h2>Игровой стол</h2><span class="subcap">ВЫБЕРИ ФИШКУ ИЛИ СУММУ</span></div><div class="betting-content"><div class="roulette-mode-bar" role="group" aria-label="Тип рулеточного стола"><button class="btn small ${state.rouletteTableMode==='classic'?'gold':'ghost'}" data-action="roulette-table" data-value="classic">Классический стол</button><button class="btn small ${state.rouletteTableMode==='pro'?'gold':'ghost'}" data-action="roulette-table" data-value="pro">Комбинации и соседи</button></div>${state.rouletteTableMode==='pro'?rouletteProHTML():''}<div class="roulette-board-scroll"><div class="roulette-grid-wrap"><button class="zero-cell" data-action="${state.rouletteTableMode==='pro'?'roulette-anchor':'roulette-bet'}" data-type="number" data-value="0" ${rt.rouletteSpinning?'disabled':''}>0${badge('number',0)}</button><div class="number-grid">${numCells}</div></div><div class="outside-grid dozen">${out('1–12','dozen','1')}${out('13–24','dozen','2')}${out('25–36','dozen','3')}</div><div class="outside-grid">${out('1–18','low','low')}${out('ЧЁТ','even','even')}${out('🔴 КРАСНОЕ','color','red','red')}${out('⚫ ЧЁРНОЕ','color','black','black')}${out('НЕЧЁТ','odd','odd')}${out('19–36','high','high')}</div><div class="outside-grid dozen">${out('Колонка 1','column','1')}${out('Колонка 2','column','2')}${out('Колонка 3','column','3')}</div></div><p class="main-scroll-hint">↔ На телефоне стол можно прокручивать вбок</p><div class="chip-toolbar"><div class="chip-stack">${[10,50,100,500,1000].map(n=>`<button class="chip-button ${state.chip===n?'active':''}" data-action="chip" data-value="${n}" title="${n} фишек">${n>=1000?'1K':n}</button>`).join('')}</div><label class="roulette-custom-bet ${state.rouletteUseCustom?'active':''}" for="rouletteCustomAmount"><span>СВОЯ СУММА <small>от 1 до 100 млн ◈</small></span><input id="rouletteCustomAmount" type="number" min="1" max="100000000" step="1" inputmode="numeric" value="${esc(state.rouletteCustomStake)}" ${rt.rouletteSpinning?'disabled':''} aria-label="Своя сумма ставки на одну ячейку"><span class="custom-bet-hint">Вводи сумму, затем нажми на поле стола</span></label><div class="button-row roulette-actions"><button class="btn small" data-action="roulette-repeat" ${!lastRouletteBets.length||rt.rouletteSpinning||rt.bets.length?'disabled':''} title="Поставить как в предыдущем вращении">⟳ Повторить</button><button class="btn small gold" data-action="roulette-double" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''} title="Добавить такие же ставки на стол">×2 Ставку</button><button class="btn small" data-action="roulette-undo" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''}>↶ Отменить</button><button class="btn small ghost" data-action="roulette-clear" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''}>Очистить</button></div></div><div class="wager-summary">Ставок: <b>${rt.bets.length}</b> · На столе: <b class="goldtext">${money(rt.bets.reduce((s,b)=>s+b.amount,0))}</b></div>${resultNote(rt.rouletteNotice,rt.rouletteNotice.startsWith('Выигрыш')?'win':'')}${!rt.rouletteSpinning?rouletteTicketHTML(rt.rouletteTicket):''}</div></div>`}
++function rouletteHTML(){const last=rt.rouletteResult??state.rouletteHistory[0]?.n??'—';const latest=state.rouletteHistory.slice(0,10);const grouped=new Map();rt.bets.forEach(b=>{const k=b.type+':'+b.value;grouped.set(k,(grouped.get(k)||0)+b.amount)});const badge=(type,value)=>grouped.has(type+':'+value)?`<span class="bet-mark">${fmt(grouped.get(type+':'+value))}</span>`:'';let numCells='';for(let row=2;row>=0;row--)for(let col=0;col<12;col++){const n=col*3+row+1;numCells+=`<button class="bet-cell ${outcomeColor(n)} ${!rt.rouletteSpinning&&last===n?'last-winning-number':''}" data-action="${state.rouletteTableMode==='pro'?'roulette-anchor':'roulette-bet'}" data-type="number" data-value="${n}" ${rt.rouletteSpinning?'disabled':''}>${n}${badge('number',n)}</button>`}const out=(text,type,value,extra='')=>`<button class="outside-bet ${extra}" data-action="roulette-bet" data-type="${type}" data-value="${value}" ${rt.rouletteSpinning?'disabled':''}>${text}${badge(type,value)}</button>`;return `<div class="hero-table"><div class="roulette-top"><div class="roulette-wheel-wrap"><div class="wheel-needle"></div><div class="ball-orbit ${rt.rouletteSpinning?'is-spinning':''}" aria-hidden="true"><i class="roulette-ball"></i></div><div class="roulette-wheel" id="rouletteWheel" style="transform:rotate(${rt.rouletteRotation}deg)">${sectorSVG(RNUM,RNUM.map(n=>n===0?'#11926f':REDS.has(n)?'#c13c4c':'#242938'))}</div></div><div class="roulette-display"><span class="panel-label">${rt.rouletteSpinning?'КОЛЕСО КРУТИТСЯ':'ПОСЛЕДНЕЕ ЧИСЛО'}</span><div class="center-result ${Number.isInteger(last)?outcomeColor(last):''} ${rt.rouletteSpinning?'is-spinning':'result-highlight'}">${last}</div><h2>${rt.rouletteSpinning?'Ожидание результата…':'Ставь на удачу'}</h2><div class="tiny">Европейская рулетка · RTP ≈ 97,3%</div><button class="btn primary" data-action="roulette-spin" ${rt.rouletteSpinning||!rt.bets.length?'disabled':''}>◉ &nbsp; КРУТИТЬ КОЛЕСО</button></div></div>${tapeHTML()}<div class="history-strip"><span class="panel-label">ИСТОРИЯ</span><div class="history-numbers">${latest.map(x=>`<span class="ball-mini ${outcomeColor(x.n)}">${x.n}</span>`).join('')||'<span class="tiny">Нет вращений</span>'}</div><button class="link-btn" data-action="history">Вся история ›</button></div></div><div class="panel betting-panel"><div class="panel-header"><h2>Игровой стол</h2><span class="subcap">ВЫБЕРИ ФИШКУ ИЛИ СУММУ</span></div><div class="betting-content"><div class="roulette-mode-bar" role="group" aria-label="Тип рулеточного стола"><button class="btn small ${state.rouletteTableMode==='classic'?'gold':'ghost'}" data-action="roulette-table" data-value="classic">Классический стол</button><button class="btn small ${state.rouletteTableMode==='pro'?'gold':'ghost'}" data-action="roulette-table" data-value="pro">Комбинации и соседи</button></div>${state.rouletteTableMode==='pro'?rouletteProHTML():''}<div class="roulette-board-scroll"><div class="roulette-grid-wrap"><button class="zero-cell" data-action="${state.rouletteTableMode==='pro'?'roulette-anchor':'roulette-bet'}" data-type="number" data-value="0" ${rt.rouletteSpinning?'disabled':''}>0${badge('number',0)}</button><div class="number-grid">${numCells}</div></div><div class="outside-grid dozen">${out('1–12','dozen','1')}${out('13–24','dozen','2')}${out('25–36','dozen','3')}</div><div class="outside-grid">${out('1–18','low','low')}${out('ЧЁТ','even','even')}${out('🔴 КРАСНОЕ','color','red','red')}${out('⚫ ЧЁРНОЕ','color','black','black')}${out('НЕЧЁТ','odd','odd')}${out('19–36','high','high')}</div><div class="outside-grid dozen">${out('Колонка 1','column','1')}${out('Колонка 2','column','2')}${out('Колонка 3','column','3')}</div></div><p class="main-scroll-hint">↔ На телефоне стол можно прокручивать вбок</p><div class="chip-toolbar"><div class="chip-stack">${[10,50,100,500,1000].map(n=>`<button class="chip-button ${state.chip===n?'active':''}" data-action="chip" data-value="${n}" title="${n} фишек">${n>=1000?'1K':n}</button>`).join('')}</div><label class="roulette-custom-bet ${state.rouletteUseCustom?'active':''}" for="rouletteCustomAmount"><span>СВОЯ СУММА <small>от 1 до 100 млн ◈</small></span><input id="rouletteCustomAmount" type="number" min="1" max="100000000" step="1" inputmode="numeric" value="${esc(state.rouletteCustomStake)}" ${rt.rouletteSpinning?'disabled':''} aria-label="Своя сумма ставки на одну ячейку"><span class="custom-bet-hint">Вводи сумму, затем нажми на поле стола</span></label>${roulettePresetsHTML()}<div class="button-row roulette-actions"><button class="btn small" data-action="roulette-repeat" ${!lastRouletteBets.length||rt.rouletteSpinning||rt.bets.length?'disabled':''} title="Поставить как в предыдущем вращении">⟳ Повторить</button><button class="btn small gold" data-action="roulette-double" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''} title="Добавить такие же ставки на стол">×2 Ставку</button><button class="btn small" data-action="roulette-undo" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''}>↶ Отменить</button><button class="btn small ghost" data-action="roulette-clear" ${!rt.bets.length||rt.rouletteSpinning?'disabled':''}>Очистить</button></div></div><div class="wager-summary">Ставок: <b>${rt.bets.length}</b> · На столе: <b class="goldtext">${money(rt.bets.reduce((s,b)=>s+b.amount,0))}</b></div>${resultNote(rt.rouletteNotice,rt.rouletteNotice.startsWith('Выигрыш')?'win':'')}${!rt.rouletteSpinning?rouletteTicketHTML(rt.rouletteTicket):''}</div></div>`}
+ function spinDuration(ms){
+  const reduced=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return (qualityMode==='lite'||reduced)?Math.min(ms,380):ms
+@@ -682,7 +738,7 @@
+   const p=profileSnapshots[name];exportProfiles[name]={...p,balance:Math.min(BALANCE_CAP,p.balance+p.reserved),reserved:0};
+  }
+  const current=exportProfiles[state.mode];
+- return {format:'NEON_CASINO_SAVE',version:5,created:new Date().toISOString(),mode:state.mode,preferences:{favorites:[...favoriteGames],recent:recentGames.slice(0,4),view:casinoView},
++ return {format:'NEON_CASINO_SAVE',version:5,created:new Date().toISOString(),mode:state.mode,preferences:{favorites:[...favoriteGames],recent:recentGames.slice(0,4),view:casinoView,roulettePresets:cloneRoulettePresets(roulettePresets)},
+  ...current,profiles:exportProfiles,dailyProgress:JSON.parse(JSON.stringify(dailyProgress))}
+ }
+ // Android returns this only after the document has actually been written.
+@@ -713,6 +769,7 @@
+  if(obj.version===5&&(
+   !obj.preferences||!Array.isArray(obj.preferences.favorites)||!Array.isArray(obj.preferences.recent)||
+   obj.preferences.favorites.length>GAMES.length||obj.preferences.recent.length>4||
++  (obj.preferences.roulettePresets!==undefined&&!validRoulettePresets(obj.preferences.roulettePresets))||
+   [...obj.preferences.favorites,...obj.preferences.recent].some(id=>typeof id!=='string'||!GAMES.some(g=>g.id===id))
+  ))throw Error('Некорректное избранное в сохранении');
+  if(!confirm(options.undo?'Вернуть оба кошелька, историю и избранное к состоянию перед предыдущим импортом?':'Заменить оба виртуальных кошелька, историю и избранное данными из файла? Перед импортом сохранится локальная страховочная копия.'))return false;
+@@ -730,7 +787,8 @@
+  Object.assign(state,profileSnapshots[state.mode]);if(!commitWallet(previous))throw Error('Не удалось записать импорт. Старый прогресс сохранён.');
+  if(obj.version===5){
+   favoriteGames=new Set(obj.preferences.favorites);recentGames=[...new Set(obj.preferences.recent)];if(['hall','casual'].includes(obj.preferences.view))casinoView=obj.preferences.view;
+-  try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]));localStorage.setItem(RECENT_STORAGE,JSON.stringify(recentGames));localStorage.setItem(VIEW_KEY,casinoView)}
++  if(obj.preferences.roulettePresets!==undefined)roulettePresets=cloneRoulettePresets(obj.preferences.roulettePresets);
++  try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]));localStorage.setItem(RECENT_STORAGE,JSON.stringify(recentGames));localStorage.setItem(VIEW_KEY,casinoView);if(obj.preferences.roulettePresets!==undefined)localStorage.setItem(ROULETTE_PRESETS_KEY,JSON.stringify(roulettePresets))}
+   catch(e){toast('Кошельки восстановлены, но избранное не удалось сохранить на устройстве',true)}
+   lastRenderedNavigation=null;renderRecent();
+  }
+@@ -1141,6 +1199,19 @@
+ window.NEON_INFO=Object.freeze({version:'1.8.9',gameCount:GAMES.length,games:GAMES.map(g=>g.name),offline:true,virtualOnly:true});
+ 
+ 
++// Roulette preset actions are atomic and never bypass the existing wallet lease.
++const presetActionHandler=handleAction;
++handleAction=function(button){
++ const a=button.dataset.action;
++ if(a==='roulette-preset-save'||a==='roulette-preset-load'||a==='roulette-preset-delete'){
++  const slot=Number(button.dataset.slot);
++  if(a==='roulette-preset-save')roulettePresetSave(slot);
++  else if(a==='roulette-preset-load')roulettePresetLoad(slot);
++  else roulettePresetDelete(slot);
++  return;
++ }
++ return presetActionHandler(button);
++};
+ // Cross-window ownership check on every modifying UI action.
+ const v171HandleAction=handleAction;
+ handleAction=function(button){
+--- a/web/app.css
++++ b/web/app.css
+@@ -765,3 +765,17 @@
+ @media(max-width:330px){.roulette-ticket{padding:10px}.ticket-totals{gap:3px}.ticket-totals>span{padding:8px 3px;font-size:9px}}
+ @media(prefers-reduced-motion:reduce){.roulette-ticket,.slot-tile.reel-landed,.card-felt .hand .playing-card{animation:none!important}}
+ .quality-lite .roulette-ticket,.quality-lite .slot-tile.reel-landed,.quality-lite .card-felt .hand .playing-card{animation:none!important}
++
++/* Roulette presets, ported from v1.8.10 */
++.roulette-presets{margin:12px 0;padding:12px;border:1px solid #c2a46c55;border-radius:14px;background:linear-gradient(135deg,#142637,#111a2b)}
++.roulette-presets-title{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-bottom:9px}
++.roulette-presets-title strong{color:#efcb86;font-size:11px;letter-spacing:.9px}
++.roulette-presets-title small{font-size:10px;color:#aabcce}
++.roulette-presets-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
++.roulette-preset{display:flex;align-items:center;flex-wrap:wrap;gap:4px;background:#0715258a;border:1px solid #c4b28622;border-radius:10px;padding:8px;min-width:0}
++.roulette-preset-number{font-size:11px;font-weight:700;color:#efdbb4;flex:1 1 100%;min-width:0}
++.roulette-preset-number small{display:block;font-size:10px;font-weight:400;color:#acbed1;overflow-wrap:anywhere;margin-top:3px}
++.roulette-preset .btn{min-height:42px;min-width:42px;padding:7px 9px;font-size:11px}
++.roulette-presets>.tiny{margin:9px 2px 0;font-size:10px;line-height:1.5}
++@media(max-width:700px){.roulette-presets-list{grid-template-columns:1fr}.roulette-preset-number{flex:1 1 auto}.roulette-preset-number small{margin-top:1px}}
++@media(prefers-reduced-motion:reduce){.roulette-preset .btn{transition:none!important}}
