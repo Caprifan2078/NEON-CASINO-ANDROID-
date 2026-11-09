@@ -1,14 +1,15 @@
 # Build iOS project from the complete source tree. Does NOT create a signed IPA.
-name: NEON P0 roulette presets iPhone and iPad Simulator QA
+name: NEON P0 atomic import iPhone and iPad Simulator QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/p0-roulette-presets-recovery-20261109']
+    branches: ['qa/p0-atomic-import-20261109']
     paths:
       - '.github/workflows/neon-multistep-ios-simulators.yml'
       - '.ci/patch-p0-lease-cleanup.py'
       - '.ci/patch-s5-reset-ephemeral.py'
       - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
+      - '.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch'
 permissions:
   contents: read
 jobs:
@@ -80,6 +81,34 @@ jobs:
           assert (root/'ios/NEONROYALE/Web/app.js').read_bytes()==new['app.js']
           assert (root/'ios/NEONROYALE/Web/app.css').read_bytes()==new['app.css']
           PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply atomic import fix to all iOS and mirrored game assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p import-merge/web
+          cp s5platform/ios/NEONROYALE/Web/app.js import-merge/web/app.js
+          test "$(shasum -a 256 import-merge/web/app.js | awk '{print $1}')" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          git apply --directory=import-merge .ci/NEON_P0_IMPORT_ATOMIC_20261109.patch
+          test "$(shasum -a 256 import-merge/web/app.js | awk '{print $1}')" = "1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected='cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba'
+          replacement=Path('import-merge/web/app.js').read_bytes()
+          root=Path('s5platform')
+          changed=0
+          for path in root.rglob('app.js'):
+              if hashlib.sha256(path.read_bytes()).hexdigest()==expected:
+                  path.write_bytes(replacement)
+                  changed+=1
+          assert changed>=3,('expected mirrored iOS, Android and desktop JS',changed)
+          assert (root/'ios/NEONROYALE/Web/app.js').read_bytes()==replacement
+          print('PASS: matching game asset copies patched',changed)
+          PY
+          NEON_TEST_JS=s5platform/ios/NEONROYALE/Web/app.js node .ci/neon-import-atomic-regression.cjs
       - name: Validate iOS version and cross-platform game resources
         shell: bash
         run: python3 s5platform/qa/check_ios_release_metadata.py
@@ -179,7 +208,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-PRESETS-${{ matrix.label }}-simulator-QA
+          name: NEON-P0-ATOMIC-IMPORT-${{ matrix.label }}-simulator-QA
           path: |
             ${{ runner.temp }}/ios-build.log
             ${{ runner.temp }}/neon-ipad-first-screen.png
