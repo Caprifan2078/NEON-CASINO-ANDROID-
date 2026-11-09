@@ -68,6 +68,15 @@ jobs:
           p.write_bytes(p.read_bytes().replace(b'\r\n',b'\n'))
           PY
           git apply --directory="$d" .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          # Git for Windows may create CRLF files after the successful apply.
+          python3 - <<'PY'
+          from pathlib import Path
+          folder=Path('s5platform/BUILD_READY_WINDOWS_LAUNCHER/web')
+          for name in ('app.js','app.css'):
+              path=folder/name
+              path.write_bytes(path.read_bytes().replace(b'\r\n',b'\n'))
+          PY
+          sha256sum "$d/web/app.js" "$d/web/app.css"
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
           node --check "$d/web/app.js"
       - uses: actions/setup-go@v5
