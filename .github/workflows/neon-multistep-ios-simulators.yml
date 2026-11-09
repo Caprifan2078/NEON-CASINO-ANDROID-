@@ -1,13 +1,14 @@
 # Build iOS project from the complete source tree. Does NOT create a signed IPA.
-name: NEON P0 multistep wallet reset iPhone and iPad Simulator QA
+name: NEON P0 roulette presets iPhone and iPad Simulator QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/multistep-settlement-20261106']
+    branches: ['qa/p0-roulette-presets-recovery-20261109']
     paths:
       - '.github/workflows/neon-multistep-ios-simulators.yml'
       - '.ci/patch-p0-lease-cleanup.py'
       - '.ci/patch-s5-reset-ephemeral.py'
+      - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
 permissions:
   contents: read
 jobs:
@@ -43,6 +44,42 @@ jobs:
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5platform
           python3 .ci/patch-s5-reset-ephemeral.py s5platform
+      - name: Apply reviewed P0 roulette presets to all matching iOS source assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p preset-merge/web
+          cp s5platform/ios/NEONROYALE/Web/app.js preset-merge/web/app.js
+          cp s5platform/ios/NEONROYALE/Web/app.css preset-merge/web/app.css
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected={'app.js':'be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb','app.css':'d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67'}
+          for name,sha in expected.items():
+              data=(Path('preset-merge/web')/name).read_bytes()
+              assert hashlib.sha256(data).hexdigest()==sha,(name,'unknown baseline')
+          PY
+          git apply --directory=preset-merge .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root=Path('s5platform')
+          old={'app.js':'be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb','app.css':'d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67'}
+          new={}
+          for name in ('app.js','app.css'):
+              new[name]=(Path('preset-merge/web')/name).read_bytes()
+          assert hashlib.sha256(new['app.js']).hexdigest()=='cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba'
+          for name in ('app.js','app.css'):
+              changed=0
+              for path in root.rglob(name):
+                  if hashlib.sha256(path.read_bytes()).hexdigest()==old[name]:
+                      path.write_bytes(new[name])
+                      changed+=1
+              assert changed>=1,(name,'no matching S5 resource changed')
+              print('PASS: patched',changed,name,'exact SHA')
+          assert (root/'ios/NEONROYALE/Web/app.js').read_bytes()==new['app.js']
+          assert (root/'ios/NEONROYALE/Web/app.css').read_bytes()==new['app.css']
+          PY
       - name: Validate iOS version and cross-platform game resources
         shell: bash
         run: python3 s5platform/qa/check_ios_release_metadata.py
@@ -142,7 +179,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-MULTISTEP-${{ matrix.label }}-simulator-QA
+          name: NEON-P0-PRESETS-${{ matrix.label }}-simulator-QA
           path: |
             ${{ runner.temp }}/ios-build.log
             ${{ runner.temp }}/neon-ipad-first-screen.png
