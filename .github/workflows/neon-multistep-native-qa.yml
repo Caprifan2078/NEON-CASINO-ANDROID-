@@ -1,10 +1,11 @@
-name: NEON P0 multistep wallet reset Windows and Linux native QA
+name: NEON P0 roulette presets Windows and Linux native QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/multistep-settlement-20261106']
+    branches: ['qa/p0-roulette-presets-recovery-20261109']
     paths:
       - '.github/workflows/neon-multistep-native-qa.yml'
+      - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
 permissions:
   contents: read
 jobs:
@@ -44,6 +45,16 @@ jobs:
           python3 .ci/patch-s5-reset-ephemeral.py s5platform
           node .ci/neon-reset-runtime-test.cjs s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
           node --check s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js
+      - name: Apply checked roulette presets to native embedded game
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb"
+          test "$(sha256sum "$d/web/app.css" | cut -d' ' -f1)" = "d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67"
+          patch --fuzz=0 --batch -d "$d" -p1 < .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          node --check "$d/web/app.js"
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -69,7 +80,7 @@ jobs:
       - name: Upload host-tested QA-only executable
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-MULTISTEP-${{ matrix.target }}-x64-QA
+          name: NEON-P0-PRESETS-${{ matrix.target }}-x64-QA
           path: s5platform/dist/${{ matrix.binary }}
           if-no-files-found: error
           retention-days: 30
