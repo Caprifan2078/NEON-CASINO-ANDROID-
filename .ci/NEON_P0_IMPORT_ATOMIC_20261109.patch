@@ -1,0 +1,54 @@
+--- a/web/app.js
++++ b/web/app.js
+@@ -778,18 +778,47 @@
+   try{const checkpoint=JSON.stringify(snapshot());if(checkpoint.length>1000000)throw Error('checkpoint too large');localStorage.setItem(PREIMPORT_KEY,checkpoint)}
+   catch(e){throw Error('Не удалось создать страховочную копию перед импортом. Экспортируй прогресс вручную и освободи место на устройстве.');}
+  }
++ // Save all imported preferences before committing either wallet. Previous code
++ // committed the wallet first and silently swallowed failed preference writes,
++ // reporting success while new presets vanished after the next cold start.
++ const importedPreferences=obj.version===5?[
++  [FAVORITES_STORAGE,JSON.stringify(obj.preferences.favorites)],
++  [RECENT_STORAGE,JSON.stringify([...new Set(obj.preferences.recent)])],
++  [VIEW_KEY,['hall','casual'].includes(obj.preferences.view)?obj.preferences.view:casinoView],
++  ...(obj.preferences.roulettePresets===undefined?[]:[[ROULETTE_PRESETS_KEY,JSON.stringify(obj.preferences.roulettePresets)]])
++ ]:[];
++ let previousPreferences=[],writtenPreferences=0;
++ const rollbackPreferences=()=>{
++  let restored=true;
++  for(let i=writtenPreferences-1;i>=0;i--){
++   const [key]=importedPreferences[i],value=previousPreferences[i];
++   try{if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value)}
++   catch(e){restored=false}
++  }
++  return restored;
++ };
++ try{
++  previousPreferences=importedPreferences.map(([key])=>localStorage.getItem(key));
++  for(const [key,value] of importedPreferences){localStorage.setItem(key,value);writtenPreferences++}
++ }catch(e){
++  const restored=rollbackPreferences();
++  throw Error(restored?'Не удалось сохранить настройки. Импорт отменён, кошельки не изменены.':'Не удалось сохранить настройки и полностью откатить их изменения. Проверь страховочную копию перед импортом.');
++ }
+  const previous=walletCheckpoint();
+  profileSnapshots.free=safeProfile(obj.version>=3?obj.profiles.free:obj,50000);
+  profileSnapshots.daily=safeProfile(obj.version>=3?obj.profiles.daily:{},DAILY_CREDIT);
+  if(obj.version>=3){const d=obj.dailyProgress;dailyProgress={day:d.day,rounds:safeAmount(d.rounds),wagered:safeAmount(d.wagered),paid:safeAmount(d.paid),startedAt:Number.isFinite(d.startedAt)?d.startedAt:Date.now(),history:safeDayHistory(d.history)}}
+  else dailyProgress={day:1,rounds:0,wagered:0,paid:0,startedAt:Date.now(),history:[]};
+  state.mode=obj.version>=3?validMode(obj.mode):'free';
+- Object.assign(state,profileSnapshots[state.mode]);if(!commitWallet(previous))throw Error('Не удалось записать импорт. Старый прогресс сохранён.');
++ Object.assign(state,profileSnapshots[state.mode]);
++ if(!commitWallet(previous)){
++  const restored=rollbackPreferences();
++  throw Error(restored?'Не удалось записать импорт. Старый прогресс и настройки сохранены.':'Не удалось записать импорт и полностью вернуть настройки. Используй страховочную копию.');
++ }
+  if(obj.version===5){
+-  favoriteGames=new Set(obj.preferences.favorites);recentGames=[...new Set(obj.preferences.recent)];if(['hall','casual'].includes(obj.preferences.view))casinoView=obj.preferences.view;
++  favoriteGames=new Set(obj.preferences.favorites);recentGames=[...new Set(obj.preferences.recent)];
++  if(['hall','casual'].includes(obj.preferences.view))casinoView=obj.preferences.view;
+   if(obj.preferences.roulettePresets!==undefined)roulettePresets=cloneRoulettePresets(obj.preferences.roulettePresets);
+-  try{localStorage.setItem(FAVORITES_STORAGE,JSON.stringify([...favoriteGames]));localStorage.setItem(RECENT_STORAGE,JSON.stringify(recentGames));localStorage.setItem(VIEW_KEY,casinoView);if(obj.preferences.roulettePresets!==undefined)localStorage.setItem(ROULETTE_PRESETS_KEY,JSON.stringify(roulettePresets))}
+-  catch(e){toast('Кошельки восстановлены, но избранное не удалось сохранить на устройстве',true)}
+   lastRenderedNavigation=null;renderRecent();
+  }
+  resetRuntime();state.modal=null;render();toast('Сохранение восстановлено');return true
