@@ -1,11 +1,13 @@
-name: NEON P0 roulette presets Windows and Linux native QA
+name: NEON P0 atomic import Windows and Linux native QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/p0-roulette-presets-recovery-20261109']
+    branches: ['qa/p0-atomic-import-20261109']
     paths:
       - '.github/workflows/neon-multistep-native-qa.yml'
       - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
+      - '.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch'
+      - '.ci/neon-import-atomic-regression.cjs'
 permissions:
   contents: read
 jobs:
@@ -79,6 +81,26 @@ jobs:
           sha256sum "$d/web/app.js" "$d/web/app.css"
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
           node --check "$d/web/app.js"
+      - name: Verify atomic import patch on native game and test storage failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch')
+          p.write_bytes(p.read_bytes().replace(b'\r\n',b'\n'))
+          PY
+          git apply --directory="$d" .ci/NEON_P0_IMPORT_ATOMIC_20261109.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('s5platform/BUILD_READY_WINDOWS_LAUNCHER/web/app.js')
+          p.write_bytes(p.read_bytes().replace(b'\r\n',b'\n'))
+          PY
+          test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2"
+          node --check "$d/web/app.js"
+          NEON_TEST_JS="$d/web/app.js" node .ci/neon-import-atomic-regression.cjs
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -104,7 +126,7 @@ jobs:
       - name: Upload host-tested QA-only executable
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-P0-PRESETS-${{ matrix.target }}-x64-QA
+          name: NEON-P0-ATOMIC-IMPORT-${{ matrix.target }}-x64-QA
           path: s5platform/dist/${{ matrix.binary }}
           if-no-files-found: error
           retention-days: 30
