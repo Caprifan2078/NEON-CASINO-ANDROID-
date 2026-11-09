@@ -1,12 +1,13 @@
-name: NEON P0 multistep wallet reset standalone HTML QA
+name: NEON P0 presets integration standalone HTML QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/multistep-settlement-20261106']
+    branches: ['qa/p0-roulette-presets-recovery-20261109']
     paths:
       - '.ci/build-standalone-offline.py'
       - '.github/workflows/neon-multistep-html-qa.yml'
       - '.ci/patch-p0-lease-cleanup.py'
+      - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
 permissions:
   contents: read
 jobs:
@@ -28,6 +29,19 @@ jobs:
           set -euo pipefail
           python3 .ci/patch-p0-lease-cleanup.py s5src
           python3 .ci/patch-s5-reset-ephemeral.py s5src
+      - name: Apply exact reviewed roulette-presets diff without replacing P0 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Source SHA: $(sha256sum s5src/web/app.js)"
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb"
+          test "$(sha256sum s5src/web/app.css | cut -d' ' -f1)" = "d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67"
+          patch --fuzz=0 --batch -d s5src -p1 < .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          node --check s5src/web/app.js
+          grep -Fq 'for(const key of Object.keys(rt))delete rt[key];' s5src/web/app.js
+          grep -Fq 'JSON.parse(raw)?.token===INSTANCE_TOKEN' s5src/web/app.js
+          echo "PASS: deterministic presets on exact 06-Nov P0 source"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -73,6 +87,19 @@ jobs:
                   page.evaluate("switchMode('free')")
                   assert page.evaluate("state.mode==='free' && state.balance===50000 && state.reserved===0")
                   print('PASS: file:// mode switch fully resets additional game state')
+                  # Presets must never create partial reservations, change the wallet on save,
+                  # or revive an active game after switching virtual wallets.
+                  page.evaluate("navigate('roulette');state.chip=100;rouletteBet('number','17')")
+                  assert page.evaluate("state.balance===49900 && state.reserved===100")
+                  assert page.evaluate("roulettePresetSave(0)") is True
+                  assert page.evaluate("roulettePresets[0]?.length===1")
+                  page.evaluate("refund(100);rt.bets=[];render()")
+                  assert page.evaluate("roulettePresetLoad(0)") is True
+                  assert page.evaluate("state.balance===49900 && state.reserved===100 && rt.bets.length===1")
+                  assert page.evaluate("snapshot().preferences.roulettePresets[0][0].amount") == 100
+                  page.evaluate("refund(100);rt.bets=[];render()")
+                  assert page.evaluate("state.balance===50000 && state.reserved===0")
+                  print("PASS: P0 wallet + persisted v1.8.10 roulette preset, atomic spend")
                   initial=page.evaluate("String(state.balance)")
                   results=page.evaluate("""() => [...document.querySelectorAll('#gameNav [data-action=nav]')].map((n)=>{ const id=n.dataset.game; n.click(); return state.game===id && Boolean(document.querySelector('#gameArea')?.children.length);})""")
                   assert len(results)==44 and all(results), 'Not all 44 game panels rendered'
@@ -83,6 +110,7 @@ jobs:
                   assert page.locator('#gameNav [data-action=nav]').count()==44, 'Expected exactly 44 game navigation buttons'
                   assert page.evaluate("localStorage.getItem('__neon_standalone_check')")=="preserved", 'localStorage not persisted on reload'
                   assert page.evaluate("String(state.balance)")==initial,'Wallet changed on reload'
+                  assert page.evaluate("roulettePresets[0]?.length===1"), 'Saved layout did not survive reload'
                   page.screenshot(path="site/NEON_OFFLINE_MOBILE_QA.png",full_page=True)
                   print("PASS: actual offline HTML loaded all 44 panels and preserved wallet on reload")
               finally:context.close()
