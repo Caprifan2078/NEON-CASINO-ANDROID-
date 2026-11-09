@@ -1,11 +1,13 @@
-name: NEON P0 roulette presets optimized Android APK and upgrade QA
+name: NEON P0 atomic import optimized Android APK and upgrade QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/p0-roulette-presets-recovery-20261109']
+    branches: ['qa/p0-atomic-import-20261109']
     paths:
       - '.ci/patch-s5-reset-ephemeral.py'
       - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
+      - '.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch'
+      - '.ci/neon-import-atomic-regression.cjs'
       - '.github/workflows/neon-multistep-android-qa.yml'
 permissions:
   contents: read
@@ -82,6 +84,17 @@ jobs:
           test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
           node --check s5src/web/app.js
           echo "PASS: Android web and bundled assets share the tested P0-presets snapshot"
+      - name: Apply SHA-locked atomic import fix to both Android web copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          patch --batch --fuzz=0 -d s5src -p1 < .ci/NEON_P0_IMPORT_ATOMIC_20261109.patch
+          cp s5src/web/app.js s5src/app/src/main/assets/web/app.js
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2"
+          cmp s5src/web/app.js s5src/app/src/main/assets/web/app.js
+          NEON_TEST_JS=s5src/web/app.js node .ci/neon-import-atomic-regression.cjs
+          node --check s5src/web/app.js
       - name: Optimize icons without changing their dimensions or game rules
         shell: bash
         run: |
@@ -106,6 +119,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "versionCode='190'"
           unzip -p "$apk" assets/web/app.js | grep -Fq 'for(const key of Object.keys(rt))delete rt[key]'
           unzip -p "$apk" assets/web/app.js | grep -Fq 'function roulettePresetLoad(slot)'
+          test "$(unzip -p "$apk" assets/web/app.js | sha256sum | cut -d' ' -f1)" = "1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2"
           sha256sum "$apk"
       - name: Enable hardware acceleration
         shell: bash
@@ -125,7 +139,7 @@ jobs:
       - name: Upload QA-only APK after passing source, signing and emulator checks
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-v1.8.9-P0-PRESETS-ANDROID-OPTIMIZED-QA
+          name: NEON-v1.8.9-P0-ATOMIC-IMPORT-ANDROID-QA
           path: s5src/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
