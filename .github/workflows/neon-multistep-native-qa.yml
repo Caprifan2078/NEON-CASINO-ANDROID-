@@ -50,9 +50,18 @@ jobs:
         run: |
           set -euo pipefail
           d=s5platform/BUILD_READY_WINDOWS_LAUNCHER
+          # Python text I/O on Windows may rewrite modified JS as CRLF.
+          # Restore portable LF before comparing exact known SHA and applying diff.
+          python3 - <<'PY'
+          from pathlib import Path
+          folder=Path('s5platform/BUILD_READY_WINDOWS_LAUNCHER/web')
+          for name in ('app.js','app.css'):
+              path=folder/name
+              path.write_bytes(path.read_bytes().replace(b'\r\n',b'\n'))
+          PY
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "be6633c5c27017cdeab26dd750018becc29ae2de19d2a7583cc1e2f4224997fb"
           test "$(sha256sum "$d/web/app.css" | cut -d' ' -f1)" = "d01358f870169a38f00186439e0c4db01e3c8e1645fbbefb1d29ce56578eac67"
-          patch --fuzz=0 --batch -d "$d" -p1 < .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
+          git apply --directory="$d" .ci/NEON_P0_ROULETTE_PRESETS_20261109.patch
           test "$(sha256sum "$d/web/app.js" | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
           node --check "$d/web/app.js"
       - uses: actions/setup-go@v5
