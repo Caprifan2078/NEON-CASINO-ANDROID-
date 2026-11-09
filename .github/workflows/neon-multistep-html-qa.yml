@@ -1,13 +1,15 @@
-name: NEON P0 presets integration standalone HTML QA
+name: NEON P0 atomic import & preferences offline HTML QA
 on:
   workflow_dispatch:
   push:
-    branches: ['qa/p0-roulette-presets-recovery-20261109']
+    branches: ['qa/p0-atomic-import-20261109']
     paths:
       - '.ci/build-standalone-offline.py'
       - '.github/workflows/neon-multistep-html-qa.yml'
       - '.ci/patch-p0-lease-cleanup.py'
       - '.ci/NEON_P0_ROULETTE_PRESETS_20261109.patch'
+      - '.ci/NEON_P0_IMPORT_ATOMIC_20261109.patch'
+      - '.ci/neon-import-atomic-regression.cjs'
 permissions:
   contents: read
 jobs:
@@ -42,6 +44,16 @@ jobs:
           grep -Fq 'for(const key of Object.keys(rt))delete rt[key];' s5src/web/app.js
           grep -Fq 'JSON.parse(raw)?.token===INSTANCE_TOKEN' s5src/web/app.js
           echo "PASS: deterministic presets on exact 06-Nov P0 source"
+      - name: Apply exact P0 import fix and run injected-failure regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "cbfeb97338224b36b439befdb1ea1f7401a7d131a398386b761cc95c245a56ba"
+          patch --fuzz=0 --batch -d s5src -p1 < .ci/NEON_P0_IMPORT_ATOMIC_20261109.patch
+          test "$(sha256sum s5src/web/app.js | cut -d' ' -f1)" = "1e6667698f1c7e4d0d9e894efcffe30c9e060e441e4977b4123236ebe5c499e2"
+          node --check s5src/web/app.js
+          NEON_TEST_JS=s5src/web/app.js node .ci/neon-import-atomic-regression.cjs
+          echo 'PASS: exact P0 atomic import snapshot'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -100,6 +112,31 @@ jobs:
                   page.evaluate("refund(100);rt.bets=[];render()")
                   assert page.evaluate("state.balance===50000 && state.reserved===0")
                   print("PASS: P0 wallet + persisted v1.8.10 roulette preset, atomic spend")
+                  # Failed preference writes must reject the import before either
+                  # wallet changes, even in the actual standalone file:// build.
+                  import_test=page.evaluate("""() => {
+                    const backup=snapshot();
+                    backup.balance=42000;backup.profiles.free.balance=42000;
+                    backup.preferences.roulettePresets=[[{type:'number',value:'22',amount:200}],null,null];
+                    const original=Storage.prototype.setItem;
+                    Storage.prototype.setItem=function(key,value){
+                      if(key===ROULETTE_PRESETS_KEY)throw new DOMException('Quota exceeded','QuotaExceededError');
+                      return original.call(this,key,value);
+                    };
+                    let error='';
+                    try{loadBackup(JSON.stringify(backup))}catch(e){error=String(e)}
+                    finally{Storage.prototype.setItem=original}
+                    return {error,balance:state.balance,preset:roulettePresets[0][0].value,
+                      stored:JSON.parse(localStorage.getItem(ROULETTE_PRESETS_KEY))[0][0].value,
+                      saved:JSON.parse(localStorage.getItem(STORAGE)).profiles.free.balance};
+                  }""")
+                  assert ('Не удалось сохранить настройки' in import_test['error'] and
+                          import_test['balance']==50000 and
+                          import_test['preset']=='17' and import_test['stored']=='17' and
+                          import_test['saved']==50000),import_test
+                  page.reload(wait_until='domcontentloaded')
+                  assert page.evaluate("state.balance===50000 && roulettePresets[0][0].value==='17'")
+                  print('PASS: atomic import rejected quota failure without changing persisted wallets or presets')
                   initial=page.evaluate("String(state.balance)")
                   results=page.evaluate("""() => [...document.querySelectorAll('#gameNav [data-action=nav]')].map((n)=>{ const id=n.dataset.game; n.click(); return state.game===id && Boolean(document.querySelector('#gameArea')?.children.length);})""")
                   assert len(results)==44 and all(results), 'Not all 44 game panels rendered'
@@ -119,6 +156,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEON-v1.8.9-P0-MULTISTEP-standalone-HTML-tested
+          name: NEON-v1.8.9-P0-ATOMIC-IMPORT-standalone-HTML-tested
           path: site/
           if-no-files-found: warn
